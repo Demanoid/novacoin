@@ -17,16 +17,16 @@
 #endif
 
 #ifdef USE_UPNP
-#include <miniupnpc/miniwget.h>
-#include <miniupnpc/miniupnpc.h>
-#include <miniupnpc/upnpcommands.h>
-#include <miniupnpc/upnperrors.h>
+#include <miniupnpc_x64/miniwget.h>
+#include <miniupnpc_x64/miniupnpc.h>
+#include <miniupnpc_x64/upnpcommands.h>
+#include <miniupnpc_x64/upnperrors.h>
 #endif
 
 using namespace std;
 using namespace boost;
 
-static const int MAX_OUTBOUND_CONNECTIONS = 16;
+static const int MAX_OUTBOUND_CONNECTIONS = 25;
 
 void ThreadMessageHandler2(void* parg);
 void ThreadSocketHandler2(void* parg);
