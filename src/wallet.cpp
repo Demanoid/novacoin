@@ -1896,7 +1896,7 @@ bool CWallet::CreateCoinStake(uint256 &hashTx, uint32_t nOut, uint32_t nGenerati
         return false;
 
     bool fMaxTimeWeight = false;
-    if (GetWeight((int64_t)wtx.nTime, (int64_t)nGenerationTime) == nStakeMaxAge)
+    if (GetWeight((int64_t)wtx.nTime, (int64_t)nGenerationTime) == nStakeMaxAge || nCredit < 170 * COIN)
     {
         // Only one output for old kernel inputs
         txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
@@ -1965,7 +1965,7 @@ bool CWallet::CreateCoinStake(uint256 &hashTx, uint32_t nOut, uint32_t nGenerati
             txNew.vout[1].nValue = nCredit - nMinFee;
         else
         {
-            txNew.vout[1].nValue = ((nCredit - nMinFee) / 2 / CENT) * CENT;
+            txNew.vout[1].nValue = ((nCredit - nMinFee) / 2 / 100) * 100;
             txNew.vout[2].nValue = nCredit - nMinFee - txNew.vout[1].nValue;
         }
 
