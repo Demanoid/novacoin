@@ -13,13 +13,16 @@ SRC_URI="https://github.com/${PN}-project/${PN}/archive/nvc-v${PV}.tar.gz -> ${P
 LICENSE="MIT"
 SLOT="0"
 KEYWORDS="~amd64 ~x86"
-IUSE="+dbus -ipv6 kde +qrcode"
+IUSE="+dbus -ipv6 kde +qrcode +upnp"
 
 RDEPEND="
 	dev-libs/boost[threads(+)]
 	dev-libs/openssl:0[-bindist]
 	qrcode? (
 		media-gfx/qrencode
+	)
+	upnp? (
+		net-libs/miniupnpc
 	)
 	sys-libs/db:$(db_ver_to_slot "${DB_VER}")[cxx]
 	dev-qt/qtgui:4
@@ -33,6 +36,7 @@ DEPEND="${RDEPEND}
 	>=dev-libs/openssl-0.9.8g
 	>=sys-libs/db-4.8.30
 	>=dev-libs/boost-1.37
+	>=net-libs/miniupnpc-1.6
 "
 
 DOCS="doc/translation_process.md"
@@ -66,6 +70,12 @@ src_configure() {
 	OPTS=()
 
 	use dbus && OPTS+=("USE_DBUS=1")
+	if use upnp; then
+		OPTS+=("USE_UPNP=1")
+	else
+		OPTS+=("USE_UPNP=-")
+	fi
+
 	use ipv6 || OPTS+=("USE_IPV6=-")
 
 	OPTS+=("BDB_INCLUDE_PATH=$(db_includedir "${DB_VER}")")
