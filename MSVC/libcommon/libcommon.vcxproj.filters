@@ -110,6 +110,9 @@
     <ClCompile Include="..\..\src\base58.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\kernel_worker.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\addrman.h">
@@ -232,5 +235,10 @@
     <ClInclude Include="..\..\src\ntp.h ">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Object Include="..\..\src\crypto\sha2\asm\sha2-x86_64.obj">
+      <Filter>Source Files</Filter>
+    </Object>
   </ItemGroup>
 </Project>
