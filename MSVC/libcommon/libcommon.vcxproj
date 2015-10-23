@@ -76,6 +76,7 @@
     <ClInclude Include="..\..\src\init.h" />
     <ClInclude Include="..\..\src\inttypes.h" />
     <ClInclude Include="..\..\src\irc.h" />
+    <ClInclude Include="..\..\src\kernel_worker.h" />
     <ClInclude Include="..\..\src\key.h" />
     <ClInclude Include="..\..\src\keystore.h" />
     <ClInclude Include="..\..\src\leveldb.h" />
