@@ -11,6 +11,10 @@
 #include "bitcoinrpc.h"
 #include "db.h"
 
+#ifdef USE_EXTJS
+#include "extfs.h"
+#endif
+
 #undef printf
 #include <boost/asio.hpp>
 #include <boost/asio/ip/v6_only.hpp>
@@ -258,6 +262,7 @@ static const CRPCCommand vRPCCommands[] =
     { "setaccount",             &setaccount,             true,   false },
     { "getaccount",             &getaccount,             false,  false },
     { "getaddressesbyaccount",  &getaddressesbyaccount,  true,   false },
+    { "getaddresses",           &getaddresses,           true,   false },
     { "sendtoaddress",          &sendtoaddress,          false,  false },
     { "mergecoins",             &mergecoins,             false,  false },
     { "getreceivedbyaddress",   &getreceivedbyaddress,   false,  false },
@@ -413,6 +418,37 @@ static string HTTPReply(int nStatus, const string& strMsg, const string& strRepl
         strMsg.c_str());
 }
 
+
+static string HTTPReplyDataHeader(int nStatus, size_t nSize, const string& strReplyType, bool keepalive)
+{
+    static int64_t nTime = GetTime();
+
+    const char *cStatus;
+         if (nStatus == HTTP_OK) cStatus = "OK";
+    else if (nStatus == HTTP_BAD_REQUEST) cStatus = "Bad Request";
+    else if (nStatus == HTTP_FORBIDDEN) cStatus = "Forbidden";
+    else if (nStatus == HTTP_NOT_FOUND) cStatus = "Not Found";
+    else if (nStatus == HTTP_INTERNAL_SERVER_ERROR) cStatus = "Internal Server Error";
+    else cStatus = "";
+
+    return strprintf(
+            "HTTP/1.1 %d %s\r\n"
+            "Date: %s\r\n"
+            "Connection: %s\r\n"
+            "Content-Length: %" PRIszu "\r\n"
+            "Content-Type: %s\r\n"
+            "Cache-Control: max-age=86400, public\r\n"
+            "Server: novacoin-json-rpc/%s\r\n"
+            "\r\n",
+        nStatus,
+        cStatus,
+        DateTimeStrFormat("%a, %d %b %Y %H:%M:%S +0000", nTime).c_str(),
+        keepalive ? "keep-alive" : "close",
+        nSize,
+        strReplyType.c_str(),
+        FormatFullVersion().c_str());
+}
+
 int ReadHTTPStatus(std::basic_istream<char>& stream, int &proto, bool &fGet, string &strLocation)
 {
     string str;
@@ -462,6 +498,7 @@ int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRe
     (void) fGet; // silence
     return ReadHTTP(stream, mapHeadersRet, strMessageRet);
 }
+
 
 int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet, bool& fGet)
 {
@@ -1043,33 +1080,50 @@ void ThreadRPCServer3(void* parg)
         JSONRequest jreq;
         try
         {
-            string strReply;
-            string strReplyType;
-            HTTPStatusCode httpCode = HTTP_OK;
-
             if (fGet)
             {
+                // Simple GET requests
+                string strReplyType;
+                vector<unsigned char> vchReply;
+
                 // Process GET requests here
-                if (strRequest == "/")
+#ifdef USE_EXTJS
+                bool isBinary = false;
+                if (!get_file(strRequest, vchReply, strReplyType, isBinary))
                 {
-                    strReply = "It works!";
-                    strReplyType = "text/html";
-                    httpCode = HTTP_OK;
+                    // No such object compiled-in
+                    conn->stream() << HTTPReply(HTTP_NOT_FOUND, "Not found", "text/html", fRun) << std::flush;
                 }
                 else
                 {
-                    strReply = "Not found";
-                    strReplyType = "text/html";
-                    httpCode = HTTP_NOT_FOUND;
+                    // Send file if found
+                    conn->stream() << HTTPReplyDataHeader(HTTP_OK, vchReply.size(), strReplyType, fRun);
+
+                    if (isBinary)
+                    {
+                        // Binary data stream may contain zeros
+                        for (unsigned int i = 0; i< vchReply.size(); i++)
+                            conn->stream() << vchReply[i];
+                    }
+                    else
+                    {
+                        conn->stream() << &vchReply[0];
+                    }
+
+                    conn->stream() << std::flush;
                 }
+#else
+                // Built without compiled-in objects
+                conn->stream() << HTTPReply(HTTP_NOT_FOUND, "Not found", "text/html", fRun) << std::flush;
+#endif
             }
             else
             {
-                // Parse JSON-RPC request
+                // JSON-RPC requests
+                string strReply;
                 Value valRequest;
                 if (!read_string(strRequest, valRequest))
                     throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
-
 
                 // singleton request
                 if (valRequest.type() == obj_type) {
@@ -1079,17 +1133,16 @@ void ThreadRPCServer3(void* parg)
 
                     // Send reply
                     strReply = JSONRPCReply(result, Value::null, jreq.id);
-                    strReplyType = "application/json";
-                    httpCode = HTTP_OK;
 
                 // array of requests
                 } else if (valRequest.type() == array_type)
                     strReply = JSONRPCExecBatch(valRequest.get_array());
                 else
                     throw JSONRPCError(RPC_PARSE_ERROR, "Top-level object parse error");
+
+                conn->stream() << HTTPReply(HTTP_OK, strReply, "application/json", fRun) << std::flush;
             }
 
-            conn->stream() << HTTPReply(httpCode, strReply, strReplyType, fRun) << std::flush;
         }
         catch (Object& objError)
         {

@@ -289,6 +289,22 @@ HEADERS += src/qt/bitcoingui.h \
     src/qt/secondauthdialog.h \
     src/qt/qrcodedialog.h
 
+contains(USE_EXTJS, 1) {
+    message(Building with ExtJS modules)
+    DEFINES += USE_EXTJS
+    HEADERS += $$PWD/src/extjs/extfs.h
+    INCLUDEPATH += src/extjs
+    LIBS += $$PWD/src/extjs/libExtJS.a
+
+    genextjs.commands = cd $$PWD/src/extjs && CXX=$$QMAKE_CXX $(MAKE) all
+    genextjs.target = $$PWD/src/extjs/libExtJS.a
+    genextjs.depends = FORCE
+
+    PRE_TARGETDEPS += $$PWD/src/extjs/libExtJS.a
+    QMAKE_EXTRA_TARGETS += genextjs
+    QMAKE_CLEAN += $$PWD/src/extjs/libExtJS.a; cd $$PWD/src/extjs ; $(MAKE) clean
+}
+
 SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/qt/intro.cpp \
     src/qt/transactiontablemodel.cpp \

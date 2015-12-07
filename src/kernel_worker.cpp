@@ -418,9 +418,9 @@ bool ScanKernelBackward_8Way(unsigned char *kernel, uint32_t nBits, uint32_t nIn
     // Get maximum possible target to filter out the majority of obviously insufficient hashes
     uint256 nMaxTarget = (bnTargetPerCoinDay * bnValueIn * nStakeMaxAge / COIN / nOneDay).getuint256();
 #ifdef _MSC_VER
-        __declspec(align(16)) uint32_t blocks1[8 * 16];
-        __declspec(align(16)) uint32_t blocks2[8 * 16];
-        __declspec(align(16)) uint32_t candidates[8 * 8];
+    __declspec(align(16)) uint32_t blocks1[8 * 16];
+    __declspec(align(16)) uint32_t blocks2[8 * 16];
+    __declspec(align(16)) uint32_t candidates[8 * 8];
 #else
     uint32_t blocks1[8 * 16] __attribute__((aligned(16)));
     uint32_t blocks2[8 * 16] __attribute__((aligned(16)));
@@ -501,9 +501,9 @@ bool ScanKernelBackward_4Way(unsigned char *kernel, uint32_t nBits, uint32_t nIn
     // Get maximum possible target to filter out the majority of obviously insufficient hashes
     uint256 nMaxTarget = (bnTargetPerCoinDay * bnValueIn * nStakeMaxAge / COIN / nOneDay).getuint256();
 #ifdef _MSC_VER
-        __declspec(align(16)) uint32_t blocks1[4 * 16];
-        __declspec(align(16)) uint32_t blocks2[4 * 16];
-        __declspec(align(16)) uint32_t candidates[4 * 8];
+    __declspec(align(16)) uint32_t blocks1[4 * 16];
+    __declspec(align(16)) uint32_t blocks2[4 * 16];
+    __declspec(align(16)) uint32_t candidates[4 * 8];
 #else
     uint32_t blocks1[4 * 16] __attribute__((aligned(16)));
     uint32_t blocks2[4 * 16] __attribute__((aligned(16)));
