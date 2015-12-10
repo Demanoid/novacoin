@@ -155,6 +155,7 @@ endif
 ifeq (${USE_ASM}, 1)
 # Assembler implementation
 OBJS += crypto/scrypt/asm/obj/scrypt-arm.o crypto/scrypt/asm/obj/scrypt-x86.o crypto/scrypt/asm/obj/scrypt-x86_64.o crypto/scrypt/asm/obj/asm-wrapper.o
+OBJS += crypto/sha2/asm/obj/sha2-arm.o crypto/sha2/asm/obj/sha2-x86.o crypto/sha2/asm/obj/sha2-x86_64.o
 
 crypto/scrypt/asm/obj/scrypt-x86.o: crypto/scrypt/asm/scrypt-x86.S
 	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
@@ -166,6 +167,15 @@ crypto/scrypt/asm/obj/scrypt-arm.o: crypto/scrypt/asm/scrypt-arm.S
 	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
 
 crypto/scrypt/asm/obj/asm-wrapper.o: crypto/scrypt/asm/asm-wrapper.cpp
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+
+crypto/sha2/asm/obj/sha2-x86.o: crypto/sha2/asm/sha2-x86.S
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+
+crypto/sha2/asm/obj/sha2-x86_64.o: crypto/sha2/asm/sha2-x86_64.S
+	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
+
+crypto/sha2/asm/obj/sha2-arm.o: crypto/sha2/asm/sha2-arm.S
 	$(CXX) -c $(xCXXFLAGS) -MMD -o $@ $<
 
 DEFS += -DUSE_ASM
@@ -221,6 +231,9 @@ clean:
 	-rm -f crypto/scrypt/generic/obj/*.o
 	-rm -f crypto/scrypt/generic/obj/*.P
 	-rm -f crypto/scrypt/generic/obj/*.d
+	-rm -f crypto/sha2/asm/obj/*.o
+	-rm -f crypto/sha2/asm/obj/*.P
+	-rm -f crypto/sha2/asm/obj/*.d
 	-rm -f obj/build.h
 
 FORCE:
