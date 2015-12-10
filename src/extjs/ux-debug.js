@@ -2277,6 +2277,7 @@ Ext.define('Ext.ux.event.Recorder', function(Recorder) {
 
 /**
 <<<<<<< HEAD
+<<<<<<< HEAD
  * This base class can be used by derived classes to dynamically require Google API's.
  */
 Ext.define('Ext.ux.google.Api', {
@@ -2373,6 +2374,8 @@ Ext.define('Ext.ux.google.Feeds', {
 /**
 =======
 >>>>>>> refs/remotes/origin/master
+=======
+>>>>>>> refs/heads/no_del_sse
  * Base class from Ext.ux.TabReorderer.
  */
 Ext.define('Ext.ux.BoxReorderer', {
@@ -9685,6 +9688,7 @@ Ext.define('Ext.ux.colorpick.Field', {
 });
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 /**
  * This view is created by the "google-rss" `Ext.dashboard.Dashboard` part.
  */
@@ -9917,6 +9921,8 @@ Ext.define('Ext.ux.dashboard.GoogleRssPart', {
 });
 =======
 >>>>>>> refs/remotes/origin/master
+=======
+>>>>>>> refs/heads/no_del_sse
 
 /**
  * Paging Memory Proxy, allows to use paging grid with in memory dataset

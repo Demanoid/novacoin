@@ -1,0 +1,22 @@
+﻿Revert "Revert scaninput optimizations for compatibility reasons."
+
+This reverts commit 259d6a2fbf09be0a77c46fc191f76b642eba152f.
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# On branch no_del_sse
+# Changes to be committed:
+#	modified:   novacoin-qt.pro
+#	new file:   src/crypto/sha2/asm/obj/.gitignore
+#	new file:   src/crypto/sha2/asm/sha2-arm.S
+#	new file:   src/crypto/sha2/asm/sha2-x86.S
+#	new file:   src/crypto/sha2/asm/sha2-x86_64.S
+#	modified:   src/kernel_worker.cpp
+#	modified:   src/kernel_worker.h
+#	modified:   src/makefile.bsd
+#	modified:   src/makefile.linux-mingw
+#	modified:   src/makefile.mingw
+#	modified:   src/makefile.osx
+#	modified:   src/makefile.unix
+#
+
