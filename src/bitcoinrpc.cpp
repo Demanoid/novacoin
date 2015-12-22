@@ -418,7 +418,6 @@ static string HTTPReply(int nStatus, const string& strMsg, const string& strRepl
         strMsg.c_str());
 }
 
-
 static string HTTPReplyDataHeader(int nStatus, size_t nSize, const string& strReplyType, bool keepalive)
 {
     static int64_t nTime = GetTime();
