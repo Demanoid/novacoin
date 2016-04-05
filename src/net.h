@@ -19,7 +19,6 @@
 
 #include "mruset.h"
 #include "netbase.h"
-#include "protocol.h"
 #include "addrman.h"
 #include "hash.h"
 
@@ -62,6 +61,9 @@ enum
     LOCAL_MAX
 };
 
+
+bool IsPeerAddrLocalGood(CNode *pnode);
+void AdvertiseLocal(CNode *pnode);
 void SetLimited(enum Network net, bool fLimited = true);
 bool IsLimited(enum Network net);
 bool IsLimited(const CNetAddr& addr);
@@ -78,7 +80,7 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer = NULL);
 enum
 {
     MSG_TX = 1,
-    MSG_BLOCK,
+    MSG_BLOCK
 };
 
 class CRequestTracker
@@ -115,13 +117,20 @@ enum threadId
     THREAD_MINTER,
     THREAD_SCRIPTCHECK,
     THREAD_NTP,
+    THREAD_IPCOLLECTOR,
 
     THREAD_MAX
 };
 
 extern bool fClient;
 extern bool fDiscover;
+<<<<<<< HEAD
 extern bool fUseUPnP;
+=======
+extern bool fNoListen;
+
+extern bool fDiscover;
+>>>>>>> refs/remotes/origin/master
 extern uint64_t nLocalServices;
 extern uint64_t nLocalHostNonce;
 extern CAddress addrSeenByPeer;
@@ -219,6 +228,9 @@ public:
     bool fGetAddr;
     std::set<uint256> setKnown;
     uint256 hashCheckpointKnown; // ppcoin: known sent sync-checkpoint
+    int64_t nNextAddrSend;
+    int64_t nNextLocalAddrSend;
+    int64_t nNextInvSend;
 
     // inventory based relay
     mruset<CInv> setInventoryKnown;
@@ -239,9 +251,9 @@ public:
         nHeaderStart = -1;
         nMessageStart = std::numeric_limits<uint32_t>::max();
         addr = addrIn;
-        addrName = addrNameIn == "" ? addr.ToStringIPPort() : addrNameIn;
+        addrName = addrNameIn.empty() ? addr.ToStringIPPort() : addrNameIn;
         nVersion = 0;
-        strSubVer = "";
+        strSubVer.clear();
         fOneShot = false;
         fClient = false; // set by version message
         fInbound = fInboundIn;
@@ -254,6 +266,9 @@ public:
         pindexLastGetBlocksBegin = 0;
         hashLastGetBlocksEnd = 0;
         nStartingHeight = -1;
+        nNextLocalAddrSend = 0;
+        nNextAddrSend = 0;
+        nNextInvSend = 0;
         fStartSync = false;
         fGetAddr = false;
         nMisbehavior = 0;
@@ -269,8 +284,7 @@ public:
     {
         if (hSocket != INVALID_SOCKET)
         {
-            closesocket(hSocket);
-            hSocket = INVALID_SOCKET;
+            CloseSocket(hSocket);
         }
     }
 
@@ -687,5 +701,8 @@ class CTransaction;
 void RelayTransaction(const CTransaction& tx, const uint256& hash);
 void RelayTransaction(const CTransaction& tx, const uint256& hash, const CDataStream& ss);
 
+
+/** Return a timestamp in the future (in microseconds) for exponentially distributed events. */
+int64_t PoissonNextSend(int64_t nNow, int average_interval_seconds);
 
 #endif

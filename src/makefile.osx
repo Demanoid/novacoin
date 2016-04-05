@@ -6,6 +6,7 @@
 # Mac OS X makefile for bitcoin
 # Originally by Laszlo Hanyecz (solar@heliacal.net)
 
+CC=llvm-gcc
 CXX=llvm-g++
 DEPSDIR=/opt/local
 
@@ -83,6 +84,7 @@ OBJS= \
     obj/stun.o \
     obj/protocol.o \
     obj/bitcoinrpc.o \
+    obj/rpccrypt.o \
     obj/rpcdump.o \
     obj/rpcnet.o \
     obj/rpcmining.o \
@@ -96,7 +98,10 @@ OBJS= \
     obj/walletdb.o \
     obj/noui.o \
     obj/kernel.o \
-    obj/kernel_worker.o
+    obj/kernel_worker.o \
+    obj/ecies.o \
+    obj/cryptogram.o \
+    obj/ipcollector.o
 
 ifndef USE_UPNP
 	override USE_UPNP = -
@@ -125,7 +130,7 @@ DEFS += $(addprefix -I,$(CURDIR)/leveldb/include) -DUSE_LEVELDB
 DEFS += $(addprefix -I,$(CURDIR)/leveldb/helpers)
 OBJS += obj/txdb-leveldb.o
 leveldb/libleveldb.a:
-	@echo "Building LevelDB ..."; cd leveldb; make; cd ..
+	@echo "Building LevelDB ..."; cd leveldb; CC=$(CC) CXX=$(CXX) make; cd ..
 obj/txdb-leveldb.o: leveldb/libleveldb.a
 else
 OBJS += obj/txdb-bdb.o

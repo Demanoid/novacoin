@@ -39,6 +39,8 @@ Value importprivkey(const Array& params, bool fHelp)
             "importprivkey <novacoinprivkey> [label] [rescan=true]\n"
             "Adds a private key (as returned by dumpprivkey) to your wallet.");
 
+    EnsureWalletIsUnlocked();
+
     string strSecret = params[0].get_str();
     string strLabel = "";
     if (params.size() > 1)
@@ -60,27 +62,27 @@ Value importprivkey(const Array& params, bool fHelp)
     bool fCompressed;
     CSecret secret = vchSecret.GetSecret(fCompressed);
     key.SetSecret(secret, fCompressed);
-    CKeyID vchAddress = key.GetPubKey().GetID();
+    CKeyID keyid = key.GetPubKey().GetID();
+    CBitcoinAddress addr = CBitcoinAddress(keyid);
     {
         LOCK2(cs_main, pwalletMain->cs_wallet);
 
-        pwalletMain->MarkDirty();
-        pwalletMain->SetAddressBookName(vchAddress, strLabel);
-
         // Don't throw error in case a key is already there
-        if (pwalletMain->HaveKey(vchAddress))
+        if (pwalletMain->HaveKey(keyid))
             return Value::null;
 
-        pwalletMain->mapKeyMetadata[vchAddress].nCreateTime = 1;
-
+        pwalletMain->mapKeyMetadata[addr].nCreateTime = 1;
         if (!pwalletMain->AddKey(key))
             throw JSONRPCError(RPC_WALLET_ERROR, "Error adding key to wallet");
 
-        // whenever a key is imported, we need to scan the whole chain
-        pwalletMain->nTimeFirstKey = 1; // 0 would be considered 'no value'
+        pwalletMain->MarkDirty();
+        pwalletMain->SetAddressBookName(addr, strLabel);
 
-        if (fRescan) 
+        if (fRescan)
         {
+            // whenever a key is imported, we need to scan the whole chain
+            pwalletMain->nTimeFirstKey = 1; // 0 would be considered 'no value'
+
             pwalletMain->ScanForWalletTransactions(pindexGenesisBlock, true);
             pwalletMain->ReacceptWalletTransactions();
         }
@@ -99,13 +101,14 @@ Value importaddress(const Array& params, bool fHelp)
     CScript script;
     CBitcoinAddress address(params[0].get_str());
     if (address.IsValid()) {
-        script.SetDestination(address.Get());
+        if (address.IsPair())
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "It's senseless to import pubkey pair address.");
+        script.SetAddress(address);
     } else if (IsHex(params[0].get_str())) {
         std::vector<unsigned char> data(ParseHex(params[0].get_str()));
         script = CScript(data.begin(), data.end());
-    } else {
+    } else
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Novacoin address or script");
-    }
 
     string strLabel = "";
     if (params.size() > 1)
@@ -128,7 +131,7 @@ Value importaddress(const Array& params, bool fHelp)
         pwalletMain->MarkDirty();
 
         if (address.IsValid())
-            pwalletMain->SetAddressBookName(address.Get(), strLabel);
+            pwalletMain->SetAddressBookName(address, strLabel);
 
         if (!pwalletMain->AddWatchOnly(script))
             throw JSONRPCError(RPC_WALLET_ERROR, "Error adding address to wallet");
@@ -159,13 +162,14 @@ Value removeaddress(const Array& params, bool fHelp)
 
     CBitcoinAddress address(params[0].get_str());
     if (address.IsValid()) {
-        script.SetDestination(address.Get());
+        if (address.IsPair())
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Pubkey pair addresses aren't supported.");
+        script.SetAddress(address);
     } else if (IsHex(params[0].get_str())) {
         std::vector<unsigned char> data(ParseHex(params[0].get_str()));
         script = CScript(data.begin(), data.end());
-    } else {
+    } else
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address or script");
-    }
 
     if (::IsMine(*pwalletMain, script) == MINE_SPENDABLE)
         throw JSONRPCError(RPC_WALLET_ERROR, "The wallet contains the private key for this address or script - can't remove it");
@@ -212,7 +216,7 @@ Value dumpprivkey(const Array& params, bool fHelp)
     CBitcoinAddress address;
     if (!address.SetString(strAddress))
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid NovaCoin address");
-    if (fWalletUnlockMintOnly) // ppcoin: no dumpprivkey in mint-only mode
+    if (fWalletUnlockMintOnly)
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Wallet is unlocked for minting only.");
     CKeyID keyID;
     if (!address.GetKeyID(keyID))
@@ -222,6 +226,35 @@ Value dumpprivkey(const Array& params, bool fHelp)
     if (!pwalletMain->GetSecret(keyID, vchSecret, fCompressed))
         throw JSONRPCError(RPC_WALLET_ERROR, "Private key for address " + strAddress + " is not known");
     return CBitcoinSecret(vchSecret, fCompressed).ToString();
+}
+
+Value dumppem(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 3)
+        throw runtime_error(
+            "dumppem <novacoinaddress> <filename> <passphrase>\n"
+            "Dump the key pair corresponding to <novacoinaddress> and store it as encrypted PEM file."
+            + HelpRequiringPassphrase());
+
+    EnsureWalletIsUnlocked();
+
+    string strAddress = params[0].get_str();
+    SecureString strPassKey;
+    strPassKey.reserve(100);
+    strPassKey = params[2].get_str().c_str();
+
+    CBitcoinAddress address;
+    if (!address.SetString(strAddress))
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid NovaCoin address");
+    if (fWalletUnlockMintOnly)
+        throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Wallet is unlocked for minting only.");
+    CKeyID keyID;
+    if (!address.GetKeyID(keyID))
+        throw JSONRPCError(RPC_TYPE_ERROR, "Address does not refer to a key");
+    if (!pwalletMain->GetPEM(keyID, params[1].get_str(), strPassKey))
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error dumping key pair to file");
+
+    return Value::null;
 }
 
 Value dumpwallet(const Array& params, bool fHelp)
@@ -238,4 +271,55 @@ Value dumpwallet(const Array& params, bool fHelp)
       throw JSONRPCError(RPC_WALLET_ERROR, "Error dumping wallet keys to file");
 
     return Value::null;
+}
+
+Value dumpmalleablekey(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error (
+            "dumpmalleablekey <Key view>\n"
+            "Dump the private and public key pairs, which correspond to provided key view.\n");
+
+    EnsureWalletIsUnlocked();
+
+    CMalleableKey mKey;
+    CMalleableKeyView keyView;
+    keyView.SetString(params[0].get_str());
+
+    if (!pwalletMain->GetMalleableKey(keyView, mKey))
+        throw runtime_error("There is no such item in the wallet");
+
+    Object result;
+    result.push_back(Pair("PrivatePair", mKey.ToString()));
+    result.push_back(Pair("Address", CBitcoinAddress(mKey.GetMalleablePubKey()).ToString()));
+
+    return result;
+}
+
+Value importmalleablekey(const Array& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error (
+            "importmalleablekey <Key data>\n"
+            "Imports the private key pair into your wallet.\n");
+
+
+    EnsureWalletIsUnlocked();
+
+    CMalleableKey mKey;
+    bool fSuccess = mKey.SetString(params[0].get_str());
+
+    Object result;
+
+    if (fSuccess)
+    {
+        fSuccess = pwalletMain->AddKey(mKey);
+        result.push_back(Pair("Successful", fSuccess));
+        result.push_back(Pair("Address", CBitcoinAddress(mKey.GetMalleablePubKey()).ToString()));
+        result.push_back(Pair("KeyView", CMalleableKeyView(mKey).ToString()));
+    }
+    else
+        result.push_back(Pair("Successful", false));
+
+    return result;
 }

@@ -79,11 +79,6 @@ std::string CUnsignedAlert::ToString() const
         strStatusBar.c_str());
 }
 
-void CUnsignedAlert::print() const
-{
-    printf("%s", ToString().c_str());
-}
-
 void CAlert::SetNull()
 {
     CUnsignedAlert::SetNull();
@@ -149,9 +144,8 @@ bool CAlert::RelayTo(CNode* pnode) const
 
 bool CAlert::CheckSignature() const
 {
-    CKey key;
-    if (!key.SetPubKey(ParseHex(fTestNet ? pszTestKey : pszMainKey)))
-        return error("CAlert::CheckSignature() : SetPubKey failed");
+    CPubKey key;
+    key.Set(ParseHex(fTestNet ? pszTestKey : pszMainKey));
     if (!key.Verify(Hash(vchMsg.begin(), vchMsg.end()), vchSig))
         return error("CAlert::CheckSignature() : verify signature failed");
 

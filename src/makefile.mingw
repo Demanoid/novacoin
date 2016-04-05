@@ -87,6 +87,7 @@ OBJS= \
     obj/stun.o \
     obj/protocol.o \
     obj/bitcoinrpc.o \
+    obj/rpccrypt.o \
     obj/rpcdump.o \
     obj/rpcnet.o \
     obj/rpcmining.o \
@@ -100,7 +101,10 @@ OBJS= \
     obj/walletdb.o \
     obj/noui.o \
     obj/kernel.o \
-    obj/kernel_worker.o
+    obj/kernel_worker.o \
+    obj/ecies.o \
+    obj/cryptogram.o \
+    obj/ipcollector.o
 
 all: novacoind.exe
 
@@ -172,7 +176,7 @@ novacoind.exe: $(OBJS:obj/%=obj/%)
 	g++ $(CFLAGS) $(LDFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
 clean:
-	-del /Q novacoind
+	-del /Q novacoind.exe
 	-del /Q obj\*
 	-del /Q crypto\scrypt\asm\obj\*
 	-del /Q crypto\sha2\asm\obj\*

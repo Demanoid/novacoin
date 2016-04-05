@@ -85,7 +85,7 @@ void CWalletDB::ListAccountCreditDebit(const string& strAccount, list<CAccountin
     if (!pcursor)
         throw runtime_error("CWalletDB::ListAccountCreditDebit() : cannot create DB cursor");
     unsigned int fFlags = DB_SET_RANGE;
-    while (true)
+    for ( ; ; )
     {
         // Read next record
         CDataStream ssKey(SER_DISK, CLIENT_VERSION);
@@ -220,11 +220,12 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         // Taking advantage of the fact that pair serialization
         // is just the two items serialized one after the other
         ssKey >> strType;
+
         if (strType == "name")
         {
             string strAddress;
             ssKey >> strAddress;
-            ssValue >> pwallet->mapAddressBook[CBitcoinAddress(strAddress).Get()];
+            ssValue >> pwallet->mapAddressBook[CBitcoinAddress(strAddress)];
         }
         else if (strType == "tx")
         {
@@ -301,17 +302,46 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             // so set the wallet birthday to the beginning of time.
             pwallet->nTimeFirstKey = 1;
         }
+        else if (strType == "malpair")
+        {
+            string strKeyView;
+
+            CSecret vchSecret;
+            ssKey >> strKeyView;
+            ssValue >> vchSecret;
+
+            CMalleableKeyView keyView(strKeyView);
+            if (!pwallet->LoadKey(keyView, vchSecret))
+            {
+                strErr = "Error reading wallet database: LoadKey failed";
+                return false;
+            }
+        }
+        else if (strType == "malcpair")
+        {
+            string strKeyView;
+
+            std::vector<unsigned char> vchCryptedSecret;
+            ssKey >> strKeyView;
+            ssValue >> vchCryptedSecret;
+
+            CMalleableKeyView keyView(strKeyView);
+            if (!pwallet->LoadCryptedKey(keyView, vchCryptedSecret))
+            {
+                strErr = "Error reading wallet database: LoadCryptedKey failed";
+                return false;
+            }
+        }
         else if (strType == "key" || strType == "wkey")
         {
-            vector<unsigned char> vchPubKey;
-            ssKey >> vchPubKey;
             CKey key;
+            CPubKey vchPubKey;
+            ssKey >> vchPubKey;
             if (strType == "key")
             {
                 wss.nKeys++;
                 CPrivKey pkey;
                 ssValue >> pkey;
-                key.SetPubKey(vchPubKey);
                 if (!key.SetPrivKey(pkey))
                 {
                     strErr = "Error reading wallet database: CPrivKey corrupt";
@@ -322,6 +352,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                     strErr = "Error reading wallet database: CPrivKey pubkey inconsistency";
                     return false;
                 }
+                key.SetCompressedPubKey(vchPubKey.IsCompressed());
                 if (!key.IsValid())
                 {
                     strErr = "Error reading wallet database: invalid CPrivKey";
@@ -332,7 +363,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             {
                 CWalletKey wkey;
                 ssValue >> wkey;
-                key.SetPubKey(vchPubKey);
                 if (!key.SetPrivKey(wkey.vchPrivKey))
                 {
                     strErr = "Error reading wallet database: CPrivKey corrupt";
@@ -343,6 +373,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                     strErr = "Error reading wallet database: CWalletKey pubkey inconsistency";
                     return false;
                 }
+                key.SetCompressedPubKey(vchPubKey.IsCompressed());
                 if (!key.IsValid())
                 {
                     strErr = "Error reading wallet database: invalid CWalletKey";
@@ -374,7 +405,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         else if (strType == "ckey")
         {
             wss.nCKeys++;
-            vector<unsigned char> vchPubKey;
+            CPubKey vchPubKey;
             ssKey >> vchPubKey;
             vector<unsigned char> vchPrivKey;
             ssValue >> vchPrivKey;
@@ -384,6 +415,20 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
                 return false;
             }
             wss.fIsEncrypted = true;
+        }
+        else if (strType == "malmeta")
+        {
+            string strKeyView;
+            ssKey >> strKeyView;
+
+            CMalleableKeyView keyView;
+            keyView.SetString(strKeyView);
+
+            CKeyMetadata keyMeta;
+            ssValue >> keyMeta;
+            wss.nKeyMeta++;
+
+            pwallet->LoadKeyMetadata(keyView, keyMeta);
         }
         else if (strType == "keymeta")
         {
@@ -415,9 +460,9 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
             // If no metadata exists yet, create a default with the pool key's
             // creation time. Note that this may be overwritten by actually
             // stored metadata for that key later, which is fine.
-            CKeyID keyid = keypool.vchPubKey.GetID();
-            if (pwallet->mapKeyMetadata.count(keyid) == 0)
-                pwallet->mapKeyMetadata[keyid] = CKeyMetadata(keypool.nTime);
+            CBitcoinAddress addr = CBitcoinAddress(keypool.vchPubKey.GetID());
+            if (pwallet->mapKeyMetadata.count(addr) == 0)
+                pwallet->mapKeyMetadata[addr] = CKeyMetadata(keypool.nTime);
 
         }
         else if (strType == "version")
@@ -452,7 +497,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
 static bool IsKeyType(string strType)
 {
     return (strType== "key" || strType == "wkey" ||
-            strType == "mkey" || strType == "ckey");
+            strType == "mkey" || strType == "ckey" || strType == "malpair" || strType == "malcpair");
 }
 
 DBErrors CWalletDB::LoadWallet(CWallet* pwallet)
@@ -480,7 +525,7 @@ DBErrors CWalletDB::LoadWallet(CWallet* pwallet)
             return DB_CORRUPT;
         }
 
-        while (true)
+        for ( ; ; )
         {
             // Read next record
             CDataStream ssKey(SER_DISK, CLIENT_VERSION);
@@ -580,7 +625,7 @@ DBErrors CWalletDB::FindWalletTx(CWallet* pwallet, vector<uint256>& vTxHash)
             return DB_CORRUPT;
         }
 
-        while (true)
+        for ( ; ; )
         {
             // Read next record
             CDataStream ssKey(SER_DISK, CLIENT_VERSION);
@@ -605,7 +650,7 @@ DBErrors CWalletDB::FindWalletTx(CWallet* pwallet, vector<uint256>& vTxHash)
         }
         pcursor->close();
     }
-    catch (boost::thread_interrupted) {
+    catch (const boost::thread_interrupted&) {
         throw;
     }
     catch (...) {
@@ -739,163 +784,188 @@ bool BackupWallet(const CWallet& wallet, const string& strDest)
 
 bool DumpWallet(CWallet* pwallet, const string& strDest)
 {
+    if (!pwallet->fFileBacked)
+        return false;
 
-  if (!pwallet->fFileBacked)
-      return false;
-  while (!fShutdown)
-  {
-      // Populate maps
-      std::map<CKeyID, int64_t> mapKeyBirth;
-      std::set<CKeyID> setKeyPool;
-      pwallet->GetKeyBirthTimes(mapKeyBirth);
-      pwallet->GetAllReserveKeys(setKeyPool);
+    std::map<CBitcoinAddress, int64_t> mapAddresses;
+    std::set<CKeyID> setKeyPool;
 
-      // sort time/key pairs
-      std::vector<std::pair<int64_t, CKeyID> > vKeyBirth;
-      for (std::map<CKeyID, int64_t>::const_iterator it = mapKeyBirth.begin(); it != mapKeyBirth.end(); it++) {
-          vKeyBirth.push_back(std::make_pair(it->second, it->first));
-      }
-      mapKeyBirth.clear();
-      std::sort(vKeyBirth.begin(), vKeyBirth.end());
+    pwallet->GetAddresses(mapAddresses);
+    pwallet->GetAllReserveKeys(setKeyPool);
 
-      // open outputfile as a stream
-      ofstream file;
-      file.open(strDest.c_str());
-      if (!file.is_open())
-         return false;
+    // sort time/key pairs
+    std::vector<std::pair<int64_t, CBitcoinAddress> > vAddresses;
+    for (std::map<CBitcoinAddress, int64_t>::const_iterator it = mapAddresses.begin(); it != mapAddresses.end(); it++) {
+        vAddresses.push_back(std::make_pair(it->second, it->first));
+    }
+    mapAddresses.clear();
+    std::sort(vAddresses.begin(), vAddresses.end());
 
-      // produce output
-      file << strprintf("# Wallet dump created by NovaCoin %s (%s)\n", CLIENT_BUILD.c_str(), CLIENT_DATE.c_str());
-      file << strprintf("# * Created on %s\n", EncodeDumpTime(GetTime()).c_str());
-      file << strprintf("# * Best block at time of backup was %i (%s),\n", nBestHeight, hashBestChain.ToString().c_str());
-      file << strprintf("#   mined on %s\n", EncodeDumpTime(pindexBest->nTime).c_str());
-      file << "\n";
-      for (std::vector<std::pair<int64_t, CKeyID> >::const_iterator it = vKeyBirth.begin(); it != vKeyBirth.end(); it++) {
-          const CKeyID &keyid = it->second;
-          std::string strTime = EncodeDumpTime(it->first);
-          std::string strAddr = CBitcoinAddress(keyid).ToString();
-          bool IsCompressed;
+    // open outputfile as a stream
+    ofstream file;
+    file.open(strDest.c_str());
+    if (!file.is_open())
+       return false;
 
-          CKey key;
-          if (pwallet->GetKey(keyid, key)) {
-              if (pwallet->mapAddressBook.count(keyid)) {
-                  CSecret secret = key.GetSecret(IsCompressed);
-                  file << strprintf("%s %s label=%s # addr=%s\n",
-                                    CBitcoinSecret(secret, IsCompressed).ToString().c_str(),
-                                    strTime.c_str(),
-                                    EncodeDumpString(pwallet->mapAddressBook[keyid]).c_str(),
-                                    strAddr.c_str());
-              } else if (setKeyPool.count(keyid)) {
-                  CSecret secret = key.GetSecret(IsCompressed);
-                  file << strprintf("%s %s reserve=1 # addr=%s\n",
-                                    CBitcoinSecret(secret, IsCompressed).ToString().c_str(),
-                                    strTime.c_str(),
-                                    strAddr.c_str());
-              } else {
-                  CSecret secret = key.GetSecret(IsCompressed);
-                  file << strprintf("%s %s change=1 # addr=%s\n",
-                                    CBitcoinSecret(secret, IsCompressed).ToString().c_str(),
-                                    strTime.c_str(),
-                                    strAddr.c_str());
-              }
-          }
-      }
-      file << "\n";
-      file << "# End of dump\n";
-      file.close();
-      return true;
-     }
-   return false;
+    // produce output
+    file << strprintf("# Wallet dump created by NovaCoin %s (%s)\n", CLIENT_BUILD.c_str(), CLIENT_DATE.c_str());
+    file << strprintf("# * Created on %s\n", EncodeDumpTime(GetTime()).c_str());
+    file << strprintf("# * Best block at time of backup was %i (%s),\n", nBestHeight, hashBestChain.ToString().c_str());
+    file << strprintf("#   mined on %s\n", EncodeDumpTime(pindexBest->nTime).c_str());
+    file << "\n";
+
+    for (std::vector<std::pair<int64_t, CBitcoinAddress> >::const_iterator it = vAddresses.begin(); it != vAddresses.end(); it++) {
+        const CBitcoinAddress &addr = it->second;
+        std::string strTime = EncodeDumpTime(it->first);
+        std::string strAddr = addr.ToString();
+
+        if (addr.IsPair()) {
+            // Pubkey pair address
+            CMalleableKeyView keyView;
+            CMalleablePubKey mPubKey(addr.GetData());
+            if (!pwallet->GetMalleableView(mPubKey, keyView))
+                continue;
+            CMalleableKey mKey;
+            pwallet->GetMalleableKey(keyView, mKey);
+            file << mKey.ToString();
+            if (pwallet->mapAddressBook.count(addr))
+                file << strprintf(" %s label=%s # view=%s addr=%s\n", strTime.c_str(), EncodeDumpString(pwallet->mapAddressBook[addr]).c_str(), keyView.ToString().c_str(), strAddr.c_str());
+            else
+                file << strprintf(" %s # view=%s addr=%s\n", strTime.c_str(), keyView.ToString().c_str(), strAddr.c_str());
+        }
+        else {
+            // Pubkey hash address
+            CKeyID keyid;
+            addr.GetKeyID(keyid);
+            bool IsCompressed;
+            CKey key;
+            if (!pwallet->GetKey(keyid, key))
+                continue;
+            CSecret secret = key.GetSecret(IsCompressed);
+            file << CBitcoinSecret(secret, IsCompressed).ToString();
+            if (pwallet->mapAddressBook.count(addr))
+                file << strprintf(" %s label=%s # addr=%s\n", strTime.c_str(), EncodeDumpString(pwallet->mapAddressBook[addr]).c_str(), strAddr.c_str());
+            else if (setKeyPool.count(keyid))
+                file << strprintf(" %s reserve=1 # addr=%s\n", strTime.c_str(), strAddr.c_str());
+            else
+                file << strprintf(" %s change=1 # addr=%s\n", strTime.c_str(), strAddr.c_str());
+        }
+    }
+
+    file << "\n";
+    file << "# End of dump\n";
+    file.close();
+
+    return true;
 }
-
 
 bool ImportWallet(CWallet *pwallet, const string& strLocation)
 {
 
    if (!pwallet->fFileBacked)
        return false;
-   while (!fShutdown)
-   {
-      // open inputfile as stream
-      ifstream file;
-      file.open(strLocation.c_str());
-      if (!file.is_open())
-          return false;
 
-      int64_t nTimeBegin = pindexBest->nTime;
+   // open inputfile as stream
+   ifstream file;
+   file.open(strLocation.c_str());
+   if (!file.is_open())
+       return false;
 
-      bool fGood = true;
+   bool fGood = true;
+   int64_t nTimeBegin = pindexBest->nTime;
 
-      // read through input file checking and importing keys into wallet.
-      while (file.good()) {
-          std::string line;
-          std::getline(file, line);
-          if (line.empty() || line[0] == '#')
-              continue;
+   // read through input file checking and importing keys into wallet.
+   while (file.good()) {
+       std::string line;
+       std::getline(file, line);
+       if (line.empty() || line[0] == '#')
+           continue; // Skip comments and empty lines
 
-          std::vector<std::string> vstr;
-          boost::split(vstr, line, boost::is_any_of(" "));
-          if (vstr.size() < 2)
-              continue;
-          CBitcoinSecret vchSecret;
-          if (!vchSecret.SetString(vstr[0]))
-              continue;
+       std::vector<std::string> vstr;
+       istringstream iss(line);
+       copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(vstr));
+       if (vstr.size() < 2)
+           continue;
 
-          bool fCompressed;
-          CKey key;
-          CSecret secret = vchSecret.GetSecret(fCompressed);
-          key.SetSecret(secret, fCompressed);
-          CKeyID keyid = key.GetPubKey().GetID();
+       int64_t nTime = DecodeDumpTime(vstr[1]);
+       std::string strLabel;
+       bool fLabel = true;
+       for (unsigned int nStr = 2; nStr < vstr.size(); nStr++) {
+           if (boost::algorithm::starts_with(vstr[nStr], "#"))
+               break;
+           if (vstr[nStr] == "change=1")
+               fLabel = false;
+           if (vstr[nStr] == "reserve=1")
+               fLabel = false;
+           if (boost::algorithm::starts_with(vstr[nStr], "label=")) {
+               strLabel = DecodeDumpString(vstr[nStr].substr(6));
+               fLabel = true;
+           }
+       }
 
-          if (pwallet->HaveKey(keyid)) {
-              printf("Skipping import of %s (key already present)\n", CBitcoinAddress(keyid).ToString().c_str());
-             continue;
-          }
-          int64_t nTime = DecodeDumpTime(vstr[1]);
-          std::string strLabel;
-          bool fLabel = true;
-          for (unsigned int nStr = 2; nStr < vstr.size(); nStr++) {
-              if (boost::algorithm::starts_with(vstr[nStr], "#"))
-                  break;
-              if (vstr[nStr] == "change=1")
-                  fLabel = false;
-              if (vstr[nStr] == "reserve=1")
-                  fLabel = false;
-              if (boost::algorithm::starts_with(vstr[nStr], "label=")) {
-                  strLabel = DecodeDumpString(vstr[nStr].substr(6));
-                  fLabel = true;
-              }
-          }
-          printf("Importing %s...\n", CBitcoinAddress(keyid).ToString().c_str());
-          if (!pwallet->AddKey(key)) {
-              fGood = false;
-              continue;
-          }
-          pwallet->mapKeyMetadata[keyid].nCreateTime = nTime;
-          if (fLabel)
-              pwallet->SetAddressBookName(keyid, strLabel);
-          nTimeBegin = std::min(nTimeBegin, nTime);
-      }
-      file.close();
+       CBitcoinAddress addr;
+       CBitcoinSecret vchSecret;
+       if (vchSecret.SetString(vstr[0])) {
+           // Simple private key
 
-      // rescan block chain looking for coins from new keys
-      CBlockIndex *pindex = pindexBest;
-      while (pindex && pindex->pprev && pindex->nTime > nTimeBegin - 7200)
-          pindex = pindex->pprev;
+           bool fCompressed;
+           CKey key;
+           CSecret secret = vchSecret.GetSecret(fCompressed);
+           key.SetSecret(secret, fCompressed);
+           CKeyID keyid = key.GetPubKey().GetID();
+           addr = CBitcoinAddress(keyid);
 
-      printf("Rescanning last %i blocks\n", pindexBest->nHeight - pindex->nHeight + 1);
-      pwallet->ScanForWalletTransactions(pindex);
-      pwallet->ReacceptWalletTransactions();
-      pwallet->MarkDirty();
+           if (pwallet->HaveKey(keyid)) {
+               printf("Skipping import of %s (key already present)\n", addr.ToString().c_str());
+               continue;
+           }
 
-      return fGood;
+           printf("Importing %s...\n", addr.ToString().c_str());
+           if (!pwallet->AddKey(key)) {
+               fGood = false;
+               continue;
+           }
+       } else {
+           // A pair of private keys
 
-  }
+           CMalleableKey mKey;
+           if (!mKey.SetString(vstr[0]))
+               continue;
+           CMalleablePubKey mPubKey = mKey.GetMalleablePubKey();
+           addr = CBitcoinAddress(mPubKey);
 
-  return false;
+           if (pwallet->CheckOwnership(mPubKey)) {
+               printf("Skipping import of %s (key already present)\n", addr.ToString().c_str());
+               continue;
+           }
 
+           printf("Importing %s...\n", addr.ToString().c_str());
+           if (!pwallet->AddKey(mKey)) {
+               fGood = false;
+               continue;
+           }
+       }
+
+       pwallet->mapKeyMetadata[addr].nCreateTime = nTime;
+       if (fLabel)
+           pwallet->SetAddressBookName(addr, strLabel);
+
+       nTimeBegin = std::min(nTimeBegin, nTime);
+   }
+   file.close();
+
+   // rescan block chain looking for coins from new keys
+   CBlockIndex *pindex = pindexBest;
+   while (pindex && pindex->pprev && pindex->nTime > nTimeBegin - 7200)
+       pindex = pindex->pprev;
+
+   printf("Rescanning last %i blocks\n", pindexBest->nHeight - pindex->nHeight + 1);
+   pwallet->ScanForWalletTransactions(pindex);
+   pwallet->ReacceptWalletTransactions();
+   pwallet->MarkDirty();
+
+   return fGood;
 }
-
 
 //
 // Try to (very carefully!) recover wallet.dat if there is a problem.

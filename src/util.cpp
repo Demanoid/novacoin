@@ -33,12 +33,6 @@ namespace boost {
 #include <openssl/rand.h>
 
 #ifdef WIN32
-#ifdef _MSC_VER
-#pragma warning(disable:4786)
-#pragma warning(disable:4804)
-#pragma warning(disable:4805)
-#pragma warning(disable:4717)
-#endif
 #ifdef _WIN32_WINNT
 #undef _WIN32_WINNT
 #endif
@@ -312,7 +306,7 @@ string vstrprintf(const char *format, va_list ap)
     char* p = buffer;
     int limit = sizeof(buffer);
     int ret;
-    while (true)
+    for ( ; ; )
     {
 #ifndef _MSC_VER
         va_list arg_ptr;
@@ -331,7 +325,7 @@ string vstrprintf(const char *format, va_list ap)
         if (p != buffer)
             delete[] p;
         limit *= 2;
-        p = new char[limit];
+        p = new(nothrow) char[limit];
         if (p == NULL)
             throw std::bad_alloc();
     }
@@ -376,7 +370,7 @@ void ParseString(const string& str, char c, vector<string>& v)
         return;
     string::size_type i1 = 0;
     string::size_type i2;
-    while (true)
+    for ( ; ; )
     {
         i2 = str.find(c, i1);
         if (i2 == str.npos)
@@ -400,16 +394,16 @@ string FormatMoney(int64_t n, bool fPlus)
     string str = strprintf("%" PRId64 ".%06" PRId64, quotient, remainder);
 
     // Right-trim excess zeros before the decimal point:
-    int nTrim = 0;
+    size_t nTrim = 0;
     for (size_t i = str.size()-1; (str[i] == '0' && isdigit(str[i-2])); --i)
         ++nTrim;
     if (nTrim)
         str.erase(str.size()-nTrim, nTrim);
 
     if (n < 0)
-        str.insert((unsigned int)0, 1, '-');
+        str.insert(0u, 1, '-');
     else if (fPlus && n > 0)
-        str.insert((unsigned int)0, 1, '+');
+        str.insert(0u, 1, '+');
     return str;
 }
 
@@ -492,7 +486,7 @@ vector<unsigned char> ParseHex(const char* psz)
 {
     // convert hex dump to vector
     vector<unsigned char> vch;
-    while (true)
+    for ( ; ; )
     {
         while (isspace(*psz))
             psz++;
@@ -711,7 +705,7 @@ vector<unsigned char> DecodeBase64(const char* p, bool* pfInvalid)
     int mode = 0;
     int left = 0;
 
-    while (1)
+    for ( ; ; )
     {
          int dec = decode64_table[(unsigned char)*p];
          if (dec == -1) break;
@@ -864,7 +858,7 @@ vector<unsigned char> DecodeBase32(const char* p, bool* pfInvalid)
     int mode = 0;
     int left = 0;
 
-    while (1)
+    for ( ; ; )
     {
          int dec = decode32_table[(unsigned char)*p];
          if (dec == -1) break;
@@ -1007,7 +1001,7 @@ std::string DecodeDumpString(const std::string &str) {
 
 bool WildcardMatch(const char* psz, const char* mask)
 {
-    while (true)
+    for ( ; ; )
     {
         switch (*mask)
         {
@@ -1180,13 +1174,11 @@ void createConf()
     pConf << "rpcuser=user\nrpcpassword="
             + randomStrGen(15)
             + "\nrpcport=8344"
-            + "\nport=7777"
             + "\n#(0=off, 1=on) daemon - run in the background as a daemon and accept commands"
             + "\ndaemon=0"
             + "\n#(0=off, 1=on) server - accept command line and JSON-RPC commands"
             + "\nserver=0"
-            + "\nrpcallowip=127.0.0.1"
-            + "\ntestnet=0";
+            + "\nrpcallowip=127.0.0.1";
     pConf.close();
 }
 
@@ -1284,16 +1276,23 @@ void ShrinkDebugFile()
     if (file && GetFilesize(file) > 10 * 1000000)
     {
         // Restart the file with some of the end
-        char pch[200000];
-        fseek(file, -((long long)sizeof(pch)), SEEK_END);
-        size_t nBytes = fread(pch, 1, sizeof(pch), file);
-        fclose(file);
-
-        file = fopen(pathLog.string().c_str(), "w");
-        if (file)
-        {
-            fwrite(pch, 1, nBytes, file);
+        try {
+            vector<char>* vBuf = new vector <char>(200000, 0);
+            fseek(file, -((long)(vBuf->size())), SEEK_END);
+            size_t nBytes = fread(&vBuf->operator[](0), 1, vBuf->size(), file);
             fclose(file);
+            file = fopen(pathLog.string().c_str(), "w");
+            if (file)
+            {
+                fwrite(&vBuf->operator[](0), 1, nBytes, file);
+                fclose(file);
+            }
+            delete vBuf;
+        }
+        catch (const bad_alloc& e) {
+            // Bad things happen - no free memory in heap at program startup
+            fclose(file);
+            printf("Warning: %s in %s:%d\n ShrinkDebugFile failed - debug.log expands further", e.what(), __FILE__, __LINE__);
         }
     }
 }
@@ -1316,7 +1315,9 @@ void ShrinkDebugFile()
 // System clock
 int64_t GetTime()
 {
-    return time(NULL);
+    int64_t now = time(NULL);
+    assert(now > 0);
+    return now;
 }
 
 // Trusted NTP offset or median of NTP samples.

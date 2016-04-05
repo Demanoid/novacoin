@@ -12,14 +12,37 @@
 
 #include "keystore.h"
 #include "bignum.h"
+#include "base58.h"
 
 typedef std::vector<uint8_t> valtype;
 
 class CTransaction;
+class CBitcoinAddress;
 
 static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520; // bytes
 
-/** IsMine() return codes */
+// Setting nSequence to this value for every input in a transaction
+// disables nLockTime.
+static const uint32_t SEQUENCE_FINAL = 0xffffffff;
+
+// Threshold for inverted nSequence: below this value it is interpreted
+// as a relative lock-time, otherwise ignored.
+//static const uint32_t SEQUENCE_THRESHOLD = 0x80000000;
+
+// If this flag set, CTxIn::nSequence is NOT interpreted as a
+// relative lock-time.
+static const uint32_t SEQUENCE_LOCKTIME_DISABLE_FLAG = 0x80000000;
+
+// If CTxIn::nSequence encodes a relative lock-time and this flag
+// is set, the relative lock-time has units of 512 seconds,
+// otherwise it specifies blocks with a granularity of 1.
+static const uint32_t SEQUENCE_LOCKTIME_TYPE_FLAG = 0x00400000;
+
+// If CTxIn::nSequence encodes a relative lock-time, this mask is
+// applied to extract that lock-time from the sequence field.
+static const uint32_t SEQUENCE_LOCKTIME_MASK = 0x0000ffff;
+
+// IsMine() return codes
 enum isminetype
 {
     MINE_NO = 0,
@@ -30,16 +53,16 @@ enum isminetype
 
 typedef uint8_t isminefilter;
 
-/** Signature hash types/flags */
+// Signature hash types/flags
 enum
 {
     SIGHASH_ALL = 1,
     SIGHASH_NONE = 2,
     SIGHASH_SINGLE = 3,
-    SIGHASH_ANYONECANPAY = 0x80,
+    SIGHASH_ANYONECANPAY = 0x80
 };
 
-/** Script verification flags */
+// Script verification flags
 enum
 {
     SCRIPT_VERIFY_NONE      = 0,
@@ -48,6 +71,8 @@ enum
     SCRIPT_VERIFY_LOW_S     = (1U << 2), // enforce low S values in signatures (depends on STRICTENC)
     SCRIPT_VERIFY_NOCACHE   = (1U << 3), // do not store results in signature cache (but do query it)
     SCRIPT_VERIFY_NULLDUMMY = (1U << 4), // verify dummy stack item consumed by CHECKMULTISIG is of zero-length
+    SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY = (1U << 9),
+    SCRIPT_VERIFY_CHECKSEQUENCEVERIFY = (1U << 10)
 };
 
 // Strict verification:
@@ -76,15 +101,16 @@ enum txnouttype
     TX_NONSTANDARD,
     // 'standard' transaction types:
     TX_PUBKEY,
+    TX_PUBKEY_DROP,
     TX_PUBKEYHASH,
     TX_SCRIPTHASH,
     TX_MULTISIG,
-    TX_NULL_DATA,
+    TX_NULL_DATA
 };
 
 const char* GetTxnOutputType(txnouttype t);
 
-/** Script opcodes */
+// Script opcodes
 enum opcodetype
 {
     // push value
@@ -124,6 +150,8 @@ enum opcodetype
     OP_ENDIF = 0x68,
     OP_VERIFY = 0x69,
     OP_RETURN = 0x6a,
+    OP_CHECKLOCKTIMEVERIFY = 0xb1,
+    OP_CHECKSEQUENCEVERIFY = 0xb2,
 
     // stack ops
     OP_TOALTSTACK = 0x6b,
@@ -209,8 +237,6 @@ enum opcodetype
 
     // expansion
     OP_NOP1 = 0xb0,
-    OP_NOP2 = 0xb1,
-    OP_NOP3 = 0xb2,
     OP_NOP4 = 0xb3,
     OP_NOP5 = 0xb4,
     OP_NOP6 = 0xb5,
@@ -219,16 +245,15 @@ enum opcodetype
     OP_NOP9 = 0xb8,
     OP_NOP10 = 0xb9,
 
-
-
     // template matching params
     OP_SMALLDATA = 0xf9,
     OP_SMALLINTEGER = 0xfa,
     OP_PUBKEYS = 0xfb,
+    OP_INTEGER = 0xfc,
     OP_PUBKEYHASH = 0xfd,
     OP_PUBKEY = 0xfe,
 
-    OP_INVALIDOPCODE = 0xff,
+    OP_INVALIDOPCODE = 0xff
 };
 
 const char* GetOpName(opcodetype opcode);
@@ -253,7 +278,7 @@ inline std::string StackString(const std::vector<std::vector<unsigned char> >& v
     return str;
 }
 
-/** Serialized script, used inside transaction inputs and outputs */
+// Serialized script, used inside transaction inputs and outputs
 class CScript : public std::vector<uint8_t>
 {
 protected:
@@ -355,7 +380,7 @@ public:
 
     CScript& operator<<(const CPubKey& key)
     {
-        std::vector<uint8_t> vchKey = key.Raw();
+        std::vector<uint8_t> vchKey(key.begin(), key.end());
         return (*this) << vchKey;
     }
 
@@ -486,7 +511,7 @@ public:
         if (opcode == OP_0)
             return 0;
         assert(opcode >= OP_1 && opcode <= OP_16);
-        return (int)opcode - (int)(OP_1 - 1);
+        return (opcode - (OP_1 - 1));
     }
     static opcodetype EncodeOP_N(int n)
     {
@@ -537,10 +562,8 @@ public:
 
     bool IsPayToScriptHash() const;
 
-    // Called by CTransaction::IsStandard and P2SH VerifyScript (which makes it consensus-critical).
-    bool IsPushOnly() const
+    bool IsPushOnly(const_iterator pc) const
     {
-        const_iterator pc = begin();
         while (pc < end())
         {
             opcodetype opcode;
@@ -552,11 +575,18 @@ public:
         return true;
     }
 
+    // Called by CTransaction::IsStandard and P2SH VerifyScript (which makes it consensus-critical).
+    bool IsPushOnly() const
+    {
+        return this->IsPushOnly(begin());
+    }
+
     // Called by CTransaction::IsStandard.
     bool HasCanonicalPushes() const;
 
     void SetDestination(const CTxDestination& address);
-    void SetMultisig(int nRequired, const std::vector<CKey>& keys);
+    void SetAddress(const CBitcoinAddress& dest);
+    void SetMultisig(int nRequired, const std::vector<CPubKey>& keys);
 
 
     void PrintHex() const
@@ -607,9 +637,11 @@ bool Solver(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<std::v
 int ScriptSigArgsExpected(txnouttype t, const std::vector<std::vector<unsigned char> >& vSolutions);
 bool IsStandard(const CScript& scriptPubKey, txnouttype& whichType);
 isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey);
-isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest);
+//isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest);
+isminetype IsMine(const CKeyStore& keystore, const CBitcoinAddress& dest);
 void ExtractAffectedKeys(const CKeyStore &keystore, const CScript& scriptPubKey, std::vector<CKeyID> &vKeys);
 bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet);
+bool ExtractAddress(const CKeyStore &keystore, const CScript& scriptPubKey, CBitcoinAddress& addressRet);
 bool ExtractDestinations(const CScript& scriptPubKey, txnouttype& typeRet, std::vector<CTxDestination>& addressRet, int& nRequiredRet);
 bool SignSignature(const CKeyStore& keystore, const CScript& fromPubKey, CTransaction& txTo, unsigned int nIn, int nHashType=SIGHASH_ALL);
 bool SignSignature(const CKeyStore& keystore, const CTransaction& txFrom, CTransaction& txTo, unsigned int nIn, int nHashType=SIGHASH_ALL);
@@ -617,6 +649,6 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
 
 // Given two sets of signatures for scriptPubKey, possibly with OP_0 placeholders,
 // combine them intelligently and return the result.
-CScript CombineSignatures(CScript scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
+CScript CombineSignatures(const CScript& scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
 
 #endif

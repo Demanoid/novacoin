@@ -4,6 +4,7 @@
 #include "init.h"
 #include "base58.h"
 #include "bitcoinunits.h"
+#include "script.h"
 #include "walletmodel.h"
 #include "addresstablemodel.h"
 #include "optionsmodel.h"
@@ -469,17 +470,21 @@ void CoinControlDialog::updateLabels(WalletModel *model, QWidget* dialog)
         dPriorityInputs += (double)out.tx->vout[out.i].nValue * (out.nDepth+1);
 
         // Bytes
-        CTxDestination address;
-        if(ExtractDestination(out.tx->vout[out.i].scriptPubKey, address))
+        CBitcoinAddress address;
+        if(ExtractAddress(*pwalletMain, out.tx->vout[out.i].scriptPubKey, address))
         {
-            CPubKey pubkey;
-            CKeyID *keyid = boost::get< CKeyID >(&address);
-            if (keyid && model->getPubKey(*keyid, pubkey))
-                nBytesInputs += (pubkey.IsCompressed() ? 148 : 180);
-            else
-                nBytesInputs += 148; // in all error cases, simply assume 148 here
+            if (address.IsPair())
+                nBytesInputs += 213;
+            else if (address.IsPubKey())
+            {
+                CPubKey pubkey;
+                CKeyID keyid;
+                if (address.GetKeyID(keyid) && model->getPubKey(keyid, pubkey))
+                    nBytesInputs += (pubkey.IsCompressed() ? 148 : 180);
+                else
+                    nBytesInputs += 148; // in all error cases, simply assume 148 here
+            }
         }
-        else nBytesInputs += 148;
     }
 
     // calculation
@@ -631,9 +636,10 @@ void CoinControlDialog::updateView()
             itemOutput->setCheckState(COLUMN_CHECKBOX,Qt::Unchecked);
 
             // address
-            CTxDestination outputAddress;
+            CBitcoinAddress outputAddress;
             QString sAddress = "";
-            if(ExtractDestination(out.tx->vout[out.i].scriptPubKey, outputAddress))
+
+            if(ExtractAddress(*pwalletMain, out.tx->vout[out.i].scriptPubKey, outputAddress))
             {
                 sAddress = CBitcoinAddress(outputAddress).ToString().c_str();
 
@@ -641,10 +647,13 @@ void CoinControlDialog::updateView()
                 if (!treeMode || (!(sAddress == sWalletAddress)))
                     itemOutput->setText(COLUMN_ADDRESS, sAddress);
 
-                CPubKey pubkey;
-                CKeyID *keyid = boost::get< CKeyID >(&outputAddress);
-                if (keyid && model->getPubKey(*keyid, pubkey) && !pubkey.IsCompressed())
-                    nInputSize = 180;
+                if (outputAddress.IsPubKey())
+                {
+                    CPubKey pubkey;
+                    CKeyID keyid;
+                    if (outputAddress.GetKeyID(keyid) && model->getPubKey(keyid, pubkey) && !pubkey.IsCompressed())
+                        nInputSize = 180;
+                }
             }
 
             // label

@@ -35,13 +35,34 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, Object& out, bool fIncludeH
         return;
     }
 
-    out.push_back(Pair("reqSigs", nRequired));
-    out.push_back(Pair("type", GetTxnOutputType(type)));
+    if (type != TX_NULL_DATA)
+    {
+        out.push_back(Pair("reqSigs", nRequired));
+        out.push_back(Pair("type", GetTxnOutputType(type)));
 
-    Array a;
-    BOOST_FOREACH(const CTxDestination& addr, addresses)
-        a.push_back(CBitcoinAddress(addr).ToString());
-    out.push_back(Pair("addresses", a));
+        if (type == TX_PUBKEY_DROP)
+        {
+            vector<valtype> vSolutions;
+            Solver(scriptPubKey, type, vSolutions);
+            out.push_back(Pair("keyVariant", HexStr(vSolutions[0])));
+            out.push_back(Pair("R", HexStr(vSolutions[1])));
+
+            CMalleableKeyView view;
+            if (pwalletMain->CheckOwnership(CPubKey(vSolutions[0]), CPubKey(vSolutions[1]), view))
+                out.push_back(Pair("pubkeyPair", CBitcoinAddress(view.GetMalleablePubKey()).ToString()));
+        }
+        else
+        {
+            Array a;
+            BOOST_FOREACH(const CTxDestination& addr, addresses)
+                a.push_back(CBitcoinAddress(addr).ToString());
+            out.push_back(Pair("addresses", a));
+        }
+    }
+    else
+    {
+        out.push_back(Pair("type", GetTxnOutputType(type)));
+    }
 }
 
 void TxToJSON(const CTransaction& tx, const uint256& hashBlock, Object& entry)
@@ -226,12 +247,13 @@ Value listunspent(const Array& params, bool fHelp)
 
 Value createrawtransaction(const Array& params, bool fHelp)
 {
-    if (fHelp || params.size() != 2)
+    if (fHelp || params.size() > 3 || params.size() < 2)
         throw runtime_error(
-            "createrawtransaction '[{\"txid\":txid,\"vout\":n},...]' '{address:amount,...}'\n"
+            "createrawtransaction <'[{\"txid\":txid,\"vout\":n},...]'> <'{address:amount,...}'> [hex data]\n"
             "Create a transaction spending given inputs\n"
             "(array of objects containing transaction id and output number),\n"
-            "sending to given address(es).\n"
+            "sending to given address(es),\n"
+            "optional data to add into data-carrying output.\n"
             "Returns hex-encoded raw transaction.\n"
             "Note that the transaction's inputs are not signed, and\n"
             "it is not stored in the wallet or transmitted to the network.");
@@ -268,19 +290,37 @@ Value createrawtransaction(const Array& params, bool fHelp)
     set<CBitcoinAddress> setAddress;
     BOOST_FOREACH(const Pair& s, sendTo)
     {
-        CBitcoinAddress address(s.name_);
-        if (!address.IsValid())
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, string("Invalid NovaCoin address: ")+s.name_);
-
-        if (setAddress.count(address))
-            throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, duplicated address: ")+s.name_);
-        setAddress.insert(address);
-
+        // Create output destination script
         CScript scriptPubKey;
-        scriptPubKey.SetDestination(address.Get());
+        CBitcoinAddress address(s.name_);
+
+        if (address.IsValid())
+        {
+            scriptPubKey.SetAddress(address);
+
+            // Don't perform duplication checking for pubkey-pair addresses
+            if (!address.IsPair())
+            {
+                if (setAddress.count(address))
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, string("Invalid parameter, duplicated address: ")+s.name_);
+                setAddress.insert(address);
+            }
+        }
+        else
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, string("Invalid output destination: ")+s.name_);
+
         int64_t nAmount = AmountFromValue(s.value_);
 
         CTxOut out(nAmount, scriptPubKey);
+        rawTx.vout.push_back(out);
+    }
+
+    if (params.size() == 3)
+    {
+        // Data carrying output
+        CScript scriptPubKey;
+        scriptPubKey << OP_RETURN << ParseHex(params[2].get_str());
+        CTxOut out(0, scriptPubKey);
         rawTx.vout.push_back(out);
     }
 
@@ -602,7 +642,6 @@ Value createmultisig(const Array& params, bool fHelp)
 
     int nRequired = params[0].get_int();
     const Array& keys = params[1].get_array();
-    string strAccount;
 
     // Gather public keys
     if (nRequired < 1)
@@ -613,7 +652,7 @@ Value createmultisig(const Array& params, bool fHelp)
                       "(got %" PRIszu " keys, but need at least %d to redeem)", keys.size(), nRequired));
     if (keys.size() > 16)
         throw runtime_error("Number of addresses involved in the multisignature address creation > 16\nReduce the number");
-    std::vector<CKey> pubkeys;
+    std::vector<CPubKey> pubkeys;
     pubkeys.resize(keys.size());
     for (unsigned int i = 0; i < keys.size(); i++)
     {
@@ -631,16 +670,18 @@ Value createmultisig(const Array& params, bool fHelp)
             if (!pwalletMain->GetPubKey(keyID, vchPubKey))
                 throw runtime_error(
                     strprintf("no full public key for address %s",ks.c_str()));
-            if (!vchPubKey.IsValid() || !pubkeys[i].SetPubKey(vchPubKey))
+            if (!vchPubKey.IsFullyValid())
                 throw runtime_error(" Invalid public key: "+ks);
+            pubkeys[i] = vchPubKey;
         }
 
         // Case 2: hex public key
         else if (IsHex(ks))
         {
             CPubKey vchPubKey(ParseHex(ks));
-            if (!vchPubKey.IsValid() || !pubkeys[i].SetPubKey(vchPubKey))
+            if (!vchPubKey.IsFullyValid())
                 throw runtime_error(" Invalid public key: "+ks);
+            pubkeys[i] = vchPubKey;
         }
         else
         {

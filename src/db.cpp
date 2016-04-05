@@ -42,11 +42,7 @@ void CDBEnv::EnvShutdown()
         DbEnv(0).remove(strPath.c_str(), 0);
 }
 
-CDBEnv::CDBEnv() : dbenv(DB_CXX_NO_EXCEPTIONS)
-{
-    fDbEnvInit = false;
-    fMockDb = false;
-}
+CDBEnv::CDBEnv() : fDetachDB(false), fDbEnvInit(false), fMockDb(false), dbenv(DB_CXX_NO_EXCEPTIONS) { }
 
 CDBEnv::~CDBEnv()
 {
@@ -122,13 +118,13 @@ bool CDBEnv::Open(boost::filesystem::path pathEnv_)
         nBlocks = nMaxLocks / 48768;
         nDeepReorg = (nBlocks - 1) / 2;
 
-        printf("Final lk_max_locks is %lu, sufficient for (worst case) %d block%s in a single transaction (up to a %d-deep reorganization)\n", (unsigned long)nMaxLocks, nBlocks, (nBlocks == 1) ? "" : "s", nDeepReorg);
+        printf("Final lk_max_locks is %u, sufficient for (worst case) %d block%s in a single transaction (up to a %d-deep reorganization)\n", nMaxLocks, nBlocks, (nBlocks == 1) ? "" : "s", nDeepReorg);
         if (nDeepReorg < 3)
         {
             if (nBlocks < 1)
-                strMessage = strprintf(_("Warning: DB_CONFIG has set_lk_max_locks %lu, which may be too low for a single block. If this limit is reached, NovaCoin may stop working."), (unsigned long)nMaxLocks);
+                strMessage = strprintf(_("Warning: DB_CONFIG has set_lk_max_locks %u, which may be too low for a single block. If this limit is reached, NovaCoin may stop working."), nMaxLocks);
             else
-                strMessage = strprintf(_("Warning: DB_CONFIG has set_lk_max_locks %lu, which may be too low for a common blockchain reorganization. If this limit is reached, NovaCoin may stop working."), (unsigned long)nMaxLocks);
+                strMessage = strprintf(_("Warning: DB_CONFIG has set_lk_max_locks %u, which may be too low for a common blockchain reorganization. If this limit is reached, NovaCoin may stop working."), nMaxLocks);
 
             strMiscWarning = strMessage;
             printf("*** %s\n", strMessage.c_str());
@@ -226,7 +222,7 @@ bool CDBEnv::Salvage(std::string strFile, bool fAggressive,
     while (!strDump.eof() && keyHex != "DATA=END")
     {
         getline(strDump, keyHex);
-        if (keyHex != "DATA_END")
+        if (keyHex != "DATA=END")
         {
             getline(strDump, valueHex);
             vResult.push_back(make_pair(ParseHex(keyHex),ParseHex(valueHex)));
@@ -292,7 +288,7 @@ CDB::CDB(const char *pszFile, const char* pszMode) :
                 delete pdb;
                 pdb = NULL;
                 --bitdb.mapFileUseCount[strFile];
-                strFile = "";
+                strFile.clear();
                 throw runtime_error(strprintf("CDB() : can't open database file %s, error %d", pszFile, ret));
             }
 
@@ -400,7 +396,7 @@ bool CDB::Rewrite(const string& strFile, const char* pszSkip)
                     }
 
                     Dbc* pcursor = db.GetCursor();
-                    if (pcursor)
+                    if (pcursor) {
                         while (fSuccess)
                         {
                             CDataStream ssKey(SER_DISK, CLIENT_VERSION);
@@ -417,9 +413,14 @@ bool CDB::Rewrite(const string& strFile, const char* pszSkip)
                                 fSuccess = false;
                                 break;
                             }
-                            if (pszSkip &&
-                                strncmp(&ssKey[0], pszSkip, std::min(ssKey.size(), strlen(pszSkip))) == 0)
-                                continue;
+
+                            if (pszSkip != NULL)
+                            {
+                                size_t pszSkipLen = strlen(pszSkip);
+                                if (strncmp(&ssKey[0], pszSkip, std::min(ssKey.size(), pszSkipLen)) == 0)
+                                    continue;
+                            }
+
                             if (strncmp(&ssKey[0], "\x07version", 8) == 0)
                             {
                                 // Update version:
@@ -432,6 +433,7 @@ bool CDB::Rewrite(const string& strFile, const char* pszSkip)
                             if (ret2 > 0)
                                 fSuccess = false;
                         }
+                    }
                     if (fSuccess)
                     {
                         db.Close();

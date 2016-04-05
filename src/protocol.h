@@ -17,9 +17,9 @@
 #include "uint256.h"
 
 extern bool fTestNet;
-static inline unsigned short GetDefaultPort(const bool testnet = fTestNet)
+inline unsigned short GetDefaultPort()
 {
-    return testnet ? 17777 : 7777;
+    return static_cast<unsigned short>(fTestNet ? 17777 : 7777);
 }
 
 
@@ -68,7 +68,7 @@ class CMessageHeader
 /** nServices flags */
 enum
 {
-    NODE_NETWORK = (1 << 0),
+    NODE_NETWORK = (1 << 0)
 };
 
 /** A CService with information about it as peer */
@@ -77,8 +77,6 @@ class CAddress : public CService
     public:
         CAddress();
         explicit CAddress(CService ipIn, uint64_t nServicesIn=NODE_NETWORK);
-
-        void Init();
 
         IMPLEMENT_SERIALIZE
             (
@@ -94,8 +92,6 @@ class CAddress : public CService
              READWRITE(nServices);
              READWRITE(*pip);
             )
-
-        void print() const;
 
     // TODO: make private (improves encapsulation)
     public:
@@ -127,7 +123,6 @@ class CInv
         bool IsKnownType() const;
         const char* GetCommand() const;
         std::string ToString() const;
-        void print() const;
 
     // TODO: make private (improves encapsulation)
     public:
