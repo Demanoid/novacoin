@@ -149,7 +149,7 @@ void MultisigDialog::on_createAddressButton_clicked()
     if(!model)
         return;
 
-    std::vector<CKey> pubkeys;
+    std::vector<CPubKey> pubkeys;
     pubkeys.resize(ui->pubkeyEntries->count());
     unsigned int required = ui->requiredSignatures->text().toUInt();
 
@@ -162,7 +162,7 @@ void MultisigDialog::on_createAddressButton_clicked()
         CPubKey vchPubKey(ParseHex(str.toStdString().c_str()));
         if(!vchPubKey.IsValid())
             return;
-        pubkeys[i].SetPubKey(vchPubKey);
+        pubkeys[i] = vchPubKey;
     }
 
     if(pubkeys.size() > 16)
@@ -243,8 +243,8 @@ void MultisigDialog::on_saveMultisigAddressButton_clicked()
     LOCK(wallet->cs_wallet);
     if(!wallet->HaveCScript(scriptID))
         wallet->AddCScript(script);
-    if(!wallet->mapAddressBook.count(CBitcoinAddress(address).Get()))
-        wallet->SetAddressBookName(CBitcoinAddress(address).Get(), label);
+    if(!wallet->mapAddressBook.count(CBitcoinAddress(address)))
+        wallet->SetAddressBookName(CBitcoinAddress(address), label);
 }
 
 void MultisigDialog::clear()
@@ -312,7 +312,7 @@ void MultisigDialog::on_createTransactionButton_clicked()
                 SendCoinsRecipient recipient = entry->getValue();
                 CBitcoinAddress address(recipient.address.toStdString());
                 CScript scriptPubKey;
-                scriptPubKey.SetDestination(address.Get());
+                scriptPubKey.SetAddress(address);
                 int64_t amount = recipient.amount;
                 CTxOut output(amount, scriptPubKey);
                 transaction.vout.push_back(output);
@@ -347,9 +347,8 @@ void MultisigDialog::on_transaction_textChanged()
     {
         ss >> tx;
     }
-    catch(std::exception &e)
+    catch(const std::exception&)
     {
-        (void)e;
         return;
     }
 
@@ -418,9 +417,8 @@ void MultisigDialog::on_signTransactionButton_clicked()
     {
         ss >> tx;
     }
-    catch(std::exception &e)
+    catch(const std::exception&)
     {
-        (void)e;
         return;
     }
     CTransaction mergedTx(tx);
@@ -538,9 +536,8 @@ void MultisigDialog::on_sendTransactionButton_clicked()
     {
         ssData >> tx;
     }
-    catch(std::exception &e)
+    catch(const std::exception&)
     {
-        (void)e;
         return;
     }
     uint256 txHash = tx.GetHash();

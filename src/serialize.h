@@ -56,56 +56,12 @@ enum
     SER_DISK            = (1 << 1),
     SER_GETHASH         = (1 << 2),
 
-	 // modifiers
-	 SER_SKIPSIG = (1 << 16),
-	 SER_BLOCKHEADERONLY = (1 << 17),
+    // modifiers
+    SER_SKIPSIG         = (1 << 16),
+    SER_BLOCKHEADERONLY = (1 << 17)
 
 };
 
-#ifdef _MSC_VER
-#define IMPLEMENT_SERIALIZE(statements)    \
-    unsigned int GetSerializeSize(int nType, int nVersion) const  \
-    {                                           \
-        CSerActionGetSerializeSize ser_action;  \
-        const bool fGetSize = true;             \
-        const bool fWrite = false;              \
-        const bool fRead = false;               \
-        unsigned int nSerSize = 0;              \
-        ser_streamplaceholder s;                \
-        assert(fGetSize||fWrite||fRead); /* suppress warning */ \
-        s.nType = nType;                        \
-        s.nVersion = nVersion;                  \
-        std::map<int, int>  mapUnkIds;          \
-        {statements}                            \
-        return nSerSize;                        \
-    }                                           \
-    template<typename Stream>                   \
-    void Serialize(Stream& s, int nType, int nVersion) const  \
-    {                                           \
-        CSerActionSerialize ser_action;         \
-        const bool fGetSize = false;            \
-        const bool fWrite = true;               \
-        const bool fRead = false;               \
-        unsigned int nSerSize = 0;              \
-        assert(fGetSize||fWrite||fRead); /* suppress warning */ \
-    std::map<int, int>  mapUnkIds;  \
-        {statements}                            \
-    }                                           \
-    template<typename Stream>                   \
-    void Unserialize(Stream& s, int nType, int nVersion)  \
-    {                                           \
-        CSerActionUnserialize ser_action;       \
-        const bool fGetSize = false;            \
-        const bool fWrite = false;              \
-        const bool fRead = true;                \
-        unsigned int nSerSize = 0;              \
-    std::map<int, int>  mapUnkIds;  \
-        assert(fGetSize||fWrite||fRead); /* suppress warning */ \
-        {statements}                            \
-    }
-
-#else
-
 #define IMPLEMENT_SERIALIZE(statements)    \
     unsigned int GetSerializeSize(int nType, int nVersion) const  \
     {                                           \
@@ -143,8 +99,6 @@ enum
         assert(fGetSize||fWrite||fRead); /* suppress warning */ \
         {statements}                            \
     }
-
-#endif
 
 #define READWRITE(obj)      (nSerSize += ::SerReadWrite(s, (obj), nType, nVersion, ser_action))
 
@@ -316,7 +270,7 @@ template<typename I>
 inline unsigned int GetSizeOfVarInt(I n)
 {
     int nRet = 0;
-    while(true) {
+    for ( ; ; ) {
         nRet++;
         if (n <= 0x7F)
             break;
@@ -330,7 +284,7 @@ void WriteVarInt(Stream& os, I n)
 {
     unsigned char tmp[(sizeof(n)*8+6)/7];
     int len=0;
-    while(true) {
+    for ( ; ; ) {
         tmp[len] = (n & 0x7F) | (len ? 0x80 : 0x00);
         if (n <= 0x7F)
             break;
@@ -346,7 +300,7 @@ template<typename Stream, typename I>
 I ReadVarInt(Stream& is)
 {
     I n = 0;
-    while(true) {
+    for ( ; ; ) {
         unsigned char chData;
         READDATA(is, chData);
         n = (n << 7) | (chData & 0x7F);
@@ -1357,7 +1311,7 @@ public:
             unsigned int pos = (unsigned int)(nReadPos % vchBuf.size());
             size_t nNow = nSize;
             if (nNow + pos > vchBuf.size())
-                nNow = (size_t)(vchBuf.size() - pos);
+                nNow = vchBuf.size() - pos;
             if (nNow + nReadPos > nSrcPos)
                 nNow = (size_t)(nSrcPos - nReadPos);
             memcpy(pch, &vchBuf[pos], nNow);

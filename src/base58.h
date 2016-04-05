@@ -67,6 +67,7 @@ public:
     bool SetString(const char* psz);
     bool SetString(const std::string& str);
     std::string ToString() const;
+    const std::vector<unsigned char> &GetData() const;
 
     int CompareTo(const CBase58Data& b58) const;
     bool operator==(const CBase58Data& b58) const { return CompareTo(b58) == 0; }
@@ -81,6 +82,8 @@ public:
  * The data vector contains RIPEMD160(SHA256(pubkey)), where pubkey is the serialized public key.
  * Script-hash-addresses have version 5 (or 196 testnet).
  * The data vector contains RIPEMD160(SHA256(cscript)), where cscript is the serialized redemption script.
+ * Pubkey-pair-addresses have version 1 (or 6 testnet)
+ * The data vector contains a serialized copy of two compressed ECDSA secp256k1 public keys.
  */
 class CBitcoinAddress;
 class CBitcoinAddressVisitor : public boost::static_visitor<bool>
@@ -91,6 +94,7 @@ public:
     CBitcoinAddressVisitor(CBitcoinAddress *addrIn) : addr(addrIn) { }
     bool operator()(const CKeyID &id) const;
     bool operator()(const CScriptID &id) const;
+    bool operator()(const CMalleablePubKey &mpk) const;
     bool operator()(const CNoDestination &no) const;
 };
 
@@ -99,15 +103,19 @@ class CBitcoinAddress : public CBase58Data
 public:
     enum
     {
+        PUBKEY_PAIR_ADDRESS = 1,
         PUBKEY_ADDRESS = 8,
         SCRIPT_ADDRESS = 20,
+        PUBKEY_PAIR_ADDRESS_TEST = 6,
         PUBKEY_ADDRESS_TEST = 111,
-        SCRIPT_ADDRESS_TEST = 196,
+        SCRIPT_ADDRESS_TEST = 196
     };
 
     bool Set(const CKeyID &id);
     bool Set(const CScriptID &id);
     bool Set(const CTxDestination &dest);
+    bool Set(const CMalleablePubKey &mpk);
+    bool Set(const CBitcoinAddress &dest);
     bool IsValid() const;
 
     CBitcoinAddress()
@@ -117,6 +125,11 @@ public:
     CBitcoinAddress(const CTxDestination &dest)
     {
         Set(dest);
+    }
+
+    CBitcoinAddress(const CMalleablePubKey &mpk)
+    {
+        Set(mpk);
     }
 
     CBitcoinAddress(const std::string& strAddress)
@@ -132,11 +145,14 @@ public:
     CTxDestination Get() const;
     bool GetKeyID(CKeyID &keyID) const;
     bool IsScript() const;
+    bool IsPubKey() const;
+    bool IsPair() const;
 };
 
-bool inline CBitcoinAddressVisitor::operator()(const CKeyID &id) const         { return addr->Set(id); }
-bool inline CBitcoinAddressVisitor::operator()(const CScriptID &id) const      { return addr->Set(id); }
-bool inline CBitcoinAddressVisitor::operator()(const CNoDestination &id) const { return false; }
+bool inline CBitcoinAddressVisitor::operator()(const CKeyID &id) const            { return addr->Set(id); }
+bool inline CBitcoinAddressVisitor::operator()(const CScriptID &id) const         { return addr->Set(id); }
+bool inline CBitcoinAddressVisitor::operator()(const CMalleablePubKey &mpk) const { return addr->Set(mpk); }
+bool inline CBitcoinAddressVisitor::operator()(const CNoDestination &id) const    { return false; }
 
 /** A base58-encoded secret key */
 class CBitcoinSecret : public CBase58Data

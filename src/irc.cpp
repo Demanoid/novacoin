@@ -7,10 +7,7 @@
 #include "base58.h"
 #include "net.h"
 
-#include <boost/algorithm/string/predicate.hpp> // for startswith() and endswith()
-
 using namespace std;
-using namespace boost;
 
 int nGotIRCAddresses = 0;
 
@@ -78,7 +75,7 @@ static bool Send(SOCKET hSocket, const char* pszSend)
 
 bool RecvLineIRC(SOCKET hSocket, string& strLine)
 {
-    while (true)
+    for ( ; ; )
     {
         bool fRet = RecvLine(hSocket, strLine);
         if (fRet)
@@ -101,7 +98,7 @@ bool RecvLineIRC(SOCKET hSocket, string& strLine)
 
 int RecvUntil(SOCKET hSocket, const char* psz1, const char* psz2=NULL, const char* psz3=NULL, const char* psz4=NULL)
 {
-    while (true)
+    for ( ; ; )
     {
         string strLine;
         strLine.reserve(10000);
@@ -136,7 +133,7 @@ bool Wait(int nSeconds)
 bool RecvCodeLine(SOCKET hSocket, const char* psz1, string& strRet)
 {
     strRet.clear();
-    while (true)
+    for ( ; ; )
     {
         string strLine;
         if (!RecvLineIRC(hSocket, strLine))
@@ -248,8 +245,7 @@ void ThreadIRCSeed2(void* parg)
 
         if (!RecvUntil(hSocket, "Found your hostname", "using your IP address instead", "Couldn't look up your hostname", "ignoring hostname"))
         {
-            closesocket(hSocket);
-            hSocket = INVALID_SOCKET;
+            CloseSocket(hSocket);
             nErrorWait = nErrorWait * 11 / 10;
             if (Wait(nErrorWait += 60))
                 continue;
@@ -264,7 +260,7 @@ void ThreadIRCSeed2(void* parg)
         // or if it keeps failing because the nick is already in use.
         if (!fNoListen && GetLocal(addrLocal, &addrIPv4) && nNameRetry<3)
             strMyName = EncodeAddress(GetLocalAddress(&addrConnect));
-        if (strMyName == "")
+        if (strMyName.empty())
             strMyName = strprintf("x%" PRIu64 "", GetRand(1000000000));
 
         Send(hSocket, strprintf("NICK %s\r", strMyName.c_str()).c_str());
@@ -273,8 +269,7 @@ void ThreadIRCSeed2(void* parg)
         int nRet = RecvUntil(hSocket, " 004 ", " 433 ");
         if (nRet != 1)
         {
-            closesocket(hSocket);
-            hSocket = INVALID_SOCKET;
+            CloseSocket(hSocket);
             if (nRet == 2)
             {
                 printf("IRC name already in use\n");
@@ -338,7 +333,7 @@ void ThreadIRCSeed2(void* parg)
             {
                 // index 7 is limited to 16 characters
                 // could get full length name at index 10, but would be different from join messages
-                strName = vWords[7].c_str();
+                strName = vWords[7];
                 printf("IRC got who\n");
             }
 
@@ -349,7 +344,7 @@ void ThreadIRCSeed2(void* parg)
                 printf("IRC got join\n");
             }
 
-            if (boost::algorithm::starts_with(strName, "u"))
+            if (strName.compare(0,1, "u") == 0)
             {
                 CAddress addr;
                 if (DecodeAddress(strName, addr))
@@ -365,8 +360,7 @@ void ThreadIRCSeed2(void* parg)
                 }
             }
         }
-        closesocket(hSocket);
-        hSocket = INVALID_SOCKET;
+        CloseSocket(hSocket);
 
         if (GetTime() - nStart > 20 * 60)
         {

@@ -8,7 +8,8 @@
 #include "util.h"
 #include "net.h"
 
-#define CHECKPOINT_MAX_SPAN (60 * 60) // max 1 hour before latest block
+// max 1 hour before latest block
+static const int64_t CHECKPOINT_MAX_SPAN = nOneHour;
 
 #ifdef WIN32
 #undef STRICT
@@ -38,6 +39,9 @@ namespace Checkpoints
 
     // Returns true if block passes checkpoint checks
     bool CheckHardened(int nHeight, const uint256& hash);
+
+    // Returns true if block passes banlist checks
+    bool CheckBanned(const uint256 &nHash);
 
     // Return conservative estimate of total number of blocks, 0 if unknown
     int GetTotalBlocksEstimate();
@@ -95,11 +99,6 @@ public:
                 ")\n",
             nVersion,
             hashCheckpoint.ToString().c_str());
-    }
-
-    void print() const
-    {
-        printf("%s", ToString().c_str());
     }
 };
 

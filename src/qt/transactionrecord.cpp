@@ -3,6 +3,8 @@
 #include "wallet.h"
 #include "base58.h"
 
+extern CWallet* pwalletMain;
+
 /* Return positive answer if transaction should be shown in list.
  */
 bool TransactionRecord::showTransaction(const CWalletTx &wtx)
@@ -30,8 +32,11 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
     int64_t nNet = nCredit - nDebit;
     uint256 hash = wtx.GetHash(), hashPrev = 0;
     std::map<std::string, std::string> mapValue = wtx.mapValue;
+    
+    bool fCoinBase = wtx.IsCoinBase(),
+         fCoinStake = wtx.IsCoinStake();
 
-    if (nNet > 0 || wtx.IsCoinBase() || wtx.IsCoinStake())
+    if (nNet > 0 || fCoinBase || fCoinStake)
     {
         //
         // Credit
@@ -41,14 +46,14 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
             if(wallet->IsMine(txout))
             {
                 TransactionRecord sub(hash, nTime);
-                CTxDestination address;
                 sub.idx = parts.size(); // sequence number
                 sub.credit = txout.nValue;
-                if (ExtractDestination(txout.scriptPubKey, address) && IsMine(*wallet, address))
+
+                CBitcoinAddress addressRet;
+                if (ExtractAddress(*pwalletMain, txout.scriptPubKey, addressRet))
                 {
-                    // Received by Bitcoin Address
                     sub.type = TransactionRecord::RecvWithAddress;
-                    sub.address = CBitcoinAddress(address).ToString();
+                    sub.address = addressRet.ToString();
                 }
                 else
                 {
@@ -56,21 +61,19 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
                     sub.type = TransactionRecord::RecvFromOther;
                     sub.address = mapValue["from"];
                 }
-                if (wtx.IsCoinBase())
-                {
-                    // Generated (proof-of-work)
-                    sub.type = TransactionRecord::Generated;
-                }
-                if (wtx.IsCoinStake())
-                {
-                    // Generated (proof-of-stake)
 
-                    if (hashPrev == hash)
-                        continue; // last coinstake output
-
+                if (fCoinBase || fCoinStake)
+                {
+                    // Generated
                     sub.type = TransactionRecord::Generated;
-                    sub.credit = nNet > 0 ? nNet : wtx.GetValueOut() - nDebit;
-                    hashPrev = hash;
+                    if (fCoinStake)
+                    {
+                        // proof-of-stake
+                        if (hashPrev == hash)
+                            continue; // last coinstake output
+                        sub.credit = nNet > 0 ? nNet : wtx.GetValueOut() - nDebit;
+                        hashPrev = hash;
+                    }
                 }
 
                 parts.append(sub);

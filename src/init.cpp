@@ -8,6 +8,7 @@
 #include "net.h"
 #include "init.h"
 #include "util.h"
+#include "ipcollector.h"
 #include "ui_interface.h"
 #include "checkpoints.h"
 #include <boost/format.hpp>
@@ -37,7 +38,6 @@ enum Checkpoints::CPMode CheckpointsMode;
 
 // Ping and address broadcast intervals
 extern int64_t nPingInterval;
-extern int64_t nBroadcastInterval;
 extern int64_t nReserveBalance;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -292,6 +292,7 @@ std::string HelpMessage()
         "  -rpcconnect=<ip>       " + _("Send commands to node running on <ip> (default: 127.0.0.1)") + "\n" +
         "  -blocknotify=<cmd>     " + _("Execute command when the best block changes (%s in cmd is replaced by block hash)") + "\n" +
         "  -walletnotify=<cmd>    " + _("Execute command when a wallet transaction changes (%s in cmd is replaced by TxID)") + "\n" +
+        "  -peercollector=<cmd>     " + _("Execute command to collect peer addresses") + "\n" +
         "  -confchange            " + _("Require a confirmations for change (default: 0)") + "\n" +
         "  -upgradewallet         " + _("Upgrade wallet to latest format") + "\n" +
         "  -keypool=<n>           " + _("Set key pool size to <n> (default: 100)") + "\n" +
@@ -374,13 +375,12 @@ bool AppInit2()
 
     // ********************************************************* Step 2: parameter interactions
 
-    nNodeLifespan = (unsigned int)(GetArg("-addrlifespan", 7));
+    nNodeLifespan = GetArgUInt("-addrlifespan", 7);
     fUseFastIndex = GetBoolArg("-fastindex", true);
     fUseMemoryLog = GetBoolArg("-memorylog", true);
 
     // Ping and address broadcast intervals
     nPingInterval = max<int64_t>(10 * 60, GetArg("-keepalive", 30 * 60));
-    nBroadcastInterval = max<int64_t>(6 * nOneHour, GetArg("-addrsetlifetime", nOneDay));
 
     CheckpointsMode = Checkpoints::STRICT;
     std::string strCpMode = GetArg("-cppolicy", "strict");
@@ -778,8 +778,7 @@ bool AppInit2()
                     strLoadError = _("Error loading block database");
                     break;
                 }
-            } catch(std::exception &e) {
-                (void)e;
+            } catch(const std::exception&) {
                 strLoadError = _("Error opening block database");
                 break;
             }
@@ -902,6 +901,13 @@ bool AppInit2()
         pwalletMain->SetDefaultKey(newDefaultKey);
         if (!pwalletMain->SetAddressBookName(pwalletMain->vchDefaultKey.GetID(), ""))
             strErrors << _("Cannot write default address") << "\n";
+
+        CMalleableKeyView keyView = pwalletMain->GenerateNewMalleableKey();
+        CMalleableKey mKey;
+        if (!pwalletMain->GetMalleableKey(keyView, mKey))
+            strErrors << _("Unable to generate new malleable key");
+        if (!pwalletMain->SetAddressBookName(CBitcoinAddress(keyView.GetMalleablePubKey()), ""))
+            strErrors << _("Cannot write default address") << "\n";
     }
 
     printf("%s", strErrors.str().c_str());
@@ -990,7 +996,11 @@ bool AppInit2()
     if (fServer)
         NewThread(ThreadRPCServer, NULL);
 
-    // ********************************************************* Step 12: finished
+    // ********************************************************* Step 13: IP collection thread
+    strCollectorCommand = GetArg("-peercollector", "");
+    if (!fTestNet && strCollectorCommand != "")
+        NewThread(ThreadIPCollector, NULL);
+    // ********************************************************* Step 14: finished
 
     uiInterface.InitMessage(_("Done loading"));
     printf("Done loading\n");
@@ -1004,7 +1014,7 @@ bool AppInit2()
 #if !defined(QT_GUI)
     // Loop until process is exit()ed from shutdown() function,
     // called from ThreadRPCServer thread when a "stop" command is received.
-    while (1)
+    for ( ; ; )
         Sleep(5000);
 #endif
 

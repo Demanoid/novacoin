@@ -207,7 +207,7 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(const QList<SendCoinsRecipie
         foreach(const SendCoinsRecipient &rcp, recipients)
         {
             CScript scriptPubKey;
-            scriptPubKey.SetDestination(CBitcoinAddress(rcp.address.toStdString()).Get());
+            scriptPubKey.SetAddress(CBitcoinAddress(rcp.address.toStdString()));
             vecSend.push_back(make_pair(scriptPubKey, rcp.amount));
         }
 
@@ -239,17 +239,17 @@ WalletModel::SendCoinsReturn WalletModel::sendCoins(const QList<SendCoinsRecipie
     foreach(const SendCoinsRecipient &rcp, recipients)
     {
         std::string strAddress = rcp.address.toStdString();
-        CTxDestination dest = CBitcoinAddress(strAddress).Get();
+        CBitcoinAddress addr(strAddress);
         std::string strLabel = rcp.label.toStdString();
         {
             LOCK(wallet->cs_wallet);
 
-            std::map<CTxDestination, std::string>::iterator mi = wallet->mapAddressBook.find(dest);
+            std::map<CBitcoinAddress, std::string>::iterator mi = wallet->mapAddressBook.find(addr);
 
             // Check if we have a new address or an updated label
             if (mi == wallet->mapAddressBook.end() || mi->second != strLabel)
             {
-                wallet->SetAddressBookName(dest, strLabel);
+                wallet->SetAddressBookName(addr, strLabel);
             }
         }
     }
@@ -359,11 +359,11 @@ static void NotifyKeyStoreStatusChanged(WalletModel *walletmodel, CCryptoKeyStor
     QMetaObject::invokeMethod(walletmodel, "updateStatus", Qt::QueuedConnection);
 }
 
-static void NotifyAddressBookChanged(WalletModel *walletmodel, CWallet *wallet, const CTxDestination &address, const std::string &label, bool isMine, ChangeType status)
+static void NotifyAddressBookChanged(WalletModel *walletmodel, CWallet *wallet, const CBitcoinAddress &address, const std::string &label, bool isMine, ChangeType status)
 {
-    OutputDebugStringF("NotifyAddressBookChanged %s %s isMine=%i status=%i\n", CBitcoinAddress(address).ToString().c_str(), label.c_str(), isMine, status);
+    OutputDebugStringF("NotifyAddressBookChanged %s %s isMine=%i status=%i\n", address.ToString().c_str(), label.c_str(), isMine, status);
     QMetaObject::invokeMethod(walletmodel, "updateAddressBook", Qt::QueuedConnection,
-                              Q_ARG(QString, QString::fromStdString(CBitcoinAddress(address).ToString())),
+                              Q_ARG(QString, QString::fromStdString(address.ToString())),
                               Q_ARG(QString, QString::fromStdString(label)),
                               Q_ARG(bool, isMine),
                               Q_ARG(int, status));
@@ -495,10 +495,11 @@ void WalletModel::listCoins(std::map<QString, std::vector<COutput> >& mapCoins) 
             cout = COutput(&wallet->mapWallet[cout.tx->vin[0].prevout.hash], cout.tx->vin[0].prevout.n, 0, true);
         }
 
-        CTxDestination address;
-        if(!out.fSpendable || !ExtractDestination(cout.tx->vout[cout.i].scriptPubKey, address))
+        CBitcoinAddress addressRet;
+        if(!out.fSpendable || !ExtractAddress(*wallet, cout.tx->vout[cout.i].scriptPubKey, addressRet))
             continue;
-        mapCoins[CBitcoinAddress(address).ToString().c_str()].push_back(out);
+
+        mapCoins[addressRet.ToString().c_str()].push_back(out);
     }
 }
 

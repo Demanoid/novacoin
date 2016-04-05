@@ -9,6 +9,10 @@ CONFIG += no_include_pwd
 CONFIG += thread
 CONFIG += static
 
+# QMAKE_CC=clang
+# QMAKE_CXX=clang++
+# QMAKE_LINK=clang++
+
 freebsd-g++: QMAKE_TARGET.arch = $$QMAKE_HOST.arch
 linux-g++: QMAKE_TARGET.arch = $$QMAKE_HOST.arch
 linux-g++-32: QMAKE_TARGET.arch = i686
@@ -30,8 +34,8 @@ win32-g++-cross: QMAKE_TARGET.arch = $$TARGET_PLATFORM
 #BOOST_LIB_PATH=C:/deps/boost_1_55_0/stage/lib
 #BDB_INCLUDE_PATH=C:/deps/db-6.0.20/build_unix
 #BDB_LIB_PATH=C:/deps/db-6.0.20/build_unix
-#OPENSSL_INCLUDE_PATH=C:/deps/openssl-1.0.1j/include
-#OPENSSL_LIB_PATH=C:/deps/openssl-1.0.1j
+#OPENSSL_INCLUDE_PATH=C:/d1eps/openssl-1.0.2g/include
+#OPENSSL_LIB_PATH=C:/deps/openssl-1.0.2g
 #QRENCODE_INCLUDE_PATH=C:/deps/qrencode-3.4.4
 #QRENCODE_LIB_PATH=C:/deps/qrencode-3.4.4/.libs
 
@@ -51,6 +55,14 @@ contains(RELEASE, 1) {
     }
 }
 
+contains(DEBUG, 1) {
+    QMAKE_CXXFLAGS -= -O2
+    QMAKE_CFLAGS -= -O2
+
+    QMAKE_CFLAGS += -g -O0
+    QMAKE_CXXCFLAGS += -g -O0
+}
+
 !win32 {
 # for extra security against potential buffer overflows: enable GCCs Stack Smashing Protection
 QMAKE_CXXFLAGS *= -fstack-protector-all --param ssp-buffer-size=1
@@ -62,6 +74,14 @@ QMAKE_LFLAGS *= -fstack-protector-all --param ssp-buffer-size=1
 
 win32:QMAKE_LFLAGS *= -Wl,--dynamicbase -Wl,--nxcompat
 win32:QMAKE_LFLAGS += -static-libgcc -static-libstdc++
+
+# use: qmake "USE_QRCODE=1"
+# libqrencode (http://fukuchi.org/works/qrencode/index.en.html) must be installed for support
+contains(USE_QRCODE, 1) {
+    message(Building with QRCode support)
+    DEFINES += USE_QRCODE
+    LIBS += -lqrencode
+}
 
 # use: qmake "USE_DBUS=1"
 contains(USE_DBUS, 1) {
@@ -259,7 +279,8 @@ HEADERS += src/qt/bitcoingui.h \
     src/qt/multisiginputentry.h \
     src/qt/multisigdialog.h \
     src/qt/secondauthdialog.h \
-    src/qt/qrcodedialog.h
+    src/ies.h \
+    src/ipcollector.h
 
 contains(USE_EXTJS, 1) {
     message(Building with ExtJS modules)
@@ -328,6 +349,7 @@ SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/qt/transactionview.cpp \
     src/qt/walletmodel.cpp \
     src/bitcoinrpc.cpp \
+    src/rpccrypt.cpp \
     src/rpcdump.cpp \
     src/rpcnet.cpp \
     src/rpcmining.cpp \
@@ -353,8 +375,10 @@ SOURCES += src/qt/bitcoin.cpp src/qt/bitcoingui.cpp \
     src/qt/multisiginputentry.cpp \
     src/qt/multisigdialog.cpp \
     src/qt/secondauthdialog.cpp \
-    src/qt/qrcodedialog.cpp \
-    src/base58.cpp
+    src/base58.cpp \
+    src/cryptogram.cpp \
+    src/ecies.cpp \
+    src/ipcollector.cpp
 
 RESOURCES += \
     src/qt/bitcoin.qrc
@@ -376,8 +400,13 @@ FORMS += \
     src/qt/forms/multisigaddressentry.ui \
     src/qt/forms/multisiginputentry.ui \
     src/qt/forms/multisigdialog.ui \
-    src/qt/forms/secondauthdialog.ui \
-    src/qt/forms/qrcodedialog.ui
+    src/qt/forms/secondauthdialog.ui
+
+contains(USE_QRCODE, 1) {
+    HEADERS += src/qt/qrcodedialog.h
+    SOURCES += src/qt/qrcodedialog.cpp
+    FORMS += src/qt/forms/qrcodedialog.ui
+}
 
 CODECFORTR = UTF-8
 
@@ -474,7 +503,7 @@ macx:QMAKE_CXXFLAGS_THREAD += -pthread
 # Set libraries and includes at end, to use platform-defined defaults if not overridden
 INCLUDEPATH += $$BOOST_INCLUDE_PATH $$BDB_INCLUDE_PATH $$OPENSSL_INCLUDE_PATH $$QRENCODE_INCLUDE_PATH
 LIBS += $$join(BOOST_LIB_PATH,,-L,) $$join(BDB_LIB_PATH,,-L,) $$join(OPENSSL_LIB_PATH,,-L,) $$join(QRENCODE_LIB_PATH,,-L,)
-LIBS += -lqrencode -lssl -lcrypto -ldb_cxx$$BDB_LIB_SUFFIX
+LIBS += -lssl -lcrypto -ldb_cxx$$BDB_LIB_SUFFIX
 # -lgdi32 has to happen after -lcrypto (see  #681)
 windows:LIBS += -lws2_32 -lshlwapi -lmswsock -lole32 -loleaut32 -luuid -lgdi32
 LIBS += -lboost_system$$BOOST_LIB_SUFFIX -lboost_filesystem$$BOOST_LIB_SUFFIX -lboost_program_options$$BOOST_LIB_SUFFIX -lboost_thread$$BOOST_THREAD_LIB_SUFFIX

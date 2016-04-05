@@ -160,7 +160,7 @@ CBlockIndex static * InsertBlockIndex(uint256 hash)
         return (*mi).second;
 
     // Create new
-    CBlockIndex* pindexNew = new CBlockIndex();
+    CBlockIndex* pindexNew = new(nothrow) CBlockIndex();
     if (!pindexNew)
         throw runtime_error("LoadBlockIndex() : new CBlockIndex failed");
     mi = mapBlockIndex.insert(make_pair(hash, pindexNew)).first;
@@ -362,7 +362,7 @@ bool CTxDB::LoadBlockIndexGuts()
 
     // Load mapBlockIndex
     unsigned int fFlags = DB_SET_RANGE;
-    while (true)
+    for ( ; ; )
     {
         // Read next record
         CDataStream ssKey(SER_DISK, CLIENT_VERSION);
