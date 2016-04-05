@@ -2331,8 +2331,11 @@ bool CWallet::CreateCoinStake(uint256 &hashTx, uint32_t nOut, uint32_t nGenerati
     if (setCoins.empty())
         return false;
 
-    bool fMaxTimeWeight = false;
-    if (GetWeight((int64_t)wtx.nTime, (int64_t)nGenerationTime) == nStakeMaxAge || nCredit < 170 * COIN)
+    bool fDontSplitCoins = false;
+    if (GetWeight((int64_t)wtx.nTime, (int64_t)nGenerationTime) == nStakeMaxAge)
+//	А было так:
+//     bool fMaxTimeWeight = false;
+//     if (GetWeight((int64_t)wtx.nTime, (int64_t)nGenerationTime) == nStakeMaxAge || nCredit < 170 * COIN)
     {
         // Only one output for old kernel inputs
         txNew.vout.push_back(CTxOut(0, scriptPubKeyOut));
