@@ -11,10 +11,6 @@
 #include "bitcoinrpc.h"
 #include "db.h"
 
-#ifdef USE_EXTJS
-#include "extfs.h"
-#endif
-
 #undef printf
 #include <boost/asio.hpp>
 #include <boost/asio/ip/v6_only.hpp>
@@ -241,8 +237,8 @@ Value stop(const Array& params, bool fHelp)
 static const CRPCCommand vRPCCommands[] =
 { //  name                      function                 safemd  unlocked
   //  ------------------------  -----------------------  ------  --------
-    { "help",                       &help,                        true,   true	},
-    { "stop",                       &stop,                        true,   true	},
+    { "help",                       &help,                        true,   true },
+    { "stop",                       &stop,                        true,   true },
     { "getbestblockhash",           &getbestblockhash,            true,   false },
     { "getblockcount",              &getblockcount,               true,   false },
     { "getconnectioncount",         &getconnectioncount,          true,   false },
@@ -254,7 +250,7 @@ static const CRPCCommand vRPCCommands[] =
     { "getinfo",                    &getinfo,                     true,   false },
     { "getsubsidy",                 &getsubsidy,                  true,   false },
     { "getmininginfo",              &getmininginfo,               true,   false },
-    { "scaninput",                  &scaninput,                   true,   true	},
+    { "scaninput",                  &scaninput,                   true,   true },
     { "getnewaddress",              &getnewaddress,               true,   false },
     { "getnettotals",               &getnettotals,                true,   true  },
     { "ntptime",                    &ntptime,                     true,   true  },
@@ -316,22 +312,22 @@ static const CRPCCommand vRPCCommands[] =
     { "signrawtransaction",         &signrawtransaction,          false,  false },
     { "sendrawtransaction",         &sendrawtransaction,          false,  false },
     { "getcheckpoint",              &getcheckpoint,               true,   false },
-    { "reservebalance",             &reservebalance,              false,  true	},
-    { "checkwallet",                &checkwallet,                 false,  true	},
-    { "repairwallet",               &repairwallet,                false,  true	},
-    { "resendwallettransactions",   &resendwallettransactions,    false,  true	},
-    { "makekeypair",                &makekeypair,                 false,  true	},
-    { "newmalleablekey",            &newmalleablekey,             false,  false	},
-    { "adjustmalleablekey",         &adjustmalleablekey,          false,  false	},
-    { "adjustmalleablepubkey",      &adjustmalleablepubkey,       false,  false	},
-    { "listmalleableviews",         &listmalleableviews,          false,  false	},
-    { "dumpmalleablekey",           &dumpmalleablekey,            false,  false	},
+    { "reservebalance",             &reservebalance,              false,  true},
+    { "checkwallet",                &checkwallet,                 false,  true},
+    { "repairwallet",               &repairwallet,                false,  true},
+    { "resendwallettransactions",   &resendwallettransactions,    false,  true},
+    { "makekeypair",                &makekeypair,                 false,  true},
+    { "newmalleablekey",            &newmalleablekey,             false,  false},
+    { "adjustmalleablekey",         &adjustmalleablekey,          false,  false},
+    { "adjustmalleablepubkey",      &adjustmalleablepubkey,       false,  false},
+    { "listmalleableviews",         &listmalleableviews,          false,  false},
+    { "dumpmalleablekey",           &dumpmalleablekey,            false,  false},
     { "importmalleablekey",         &importmalleablekey,          true,   false },
     { "encryptdata",                &encryptdata,                 false,  false },
     { "decryptdata",                &decryptdata,                 false,  false },
     { "encryptmessage",             &encryptmessage,              false,  false },
     { "decryptmessage",             &decryptmessage,              false,  false },
-    { "sendalert",                  &sendalert,                   false,  false	},
+    { "sendalert",                  &sendalert,                   false,  false},
 };
 
 CRPCTable::CRPCTable()
@@ -383,7 +379,7 @@ string rfc1123Time()
     return DateTimeStrFormat("%a, %d %b %Y %H:%M:%S +0000", GetTime());
 }
 
-static string HTTPReply(int nStatus, const string& strMsg, const string& strReplyType, bool keepalive)
+static string HTTPReply(int nStatus, const string& strMsg, bool keepalive)
 {
     if (nStatus == HTTP_UNAUTHORIZED)
         return strprintf("HTTP/1.0 401 Authorization Required\r\n"
@@ -414,7 +410,7 @@ static string HTTPReply(int nStatus, const string& strMsg, const string& strRepl
             "Date: %s\r\n"
             "Connection: %s\r\n"
             "Content-Length: %" PRIszu "\r\n"
-            "Content-Type: %s\r\n"
+            "Content-Type: application/json\r\n"
             "Server: novacoin-json-rpc/%s\r\n"
             "\r\n"
             "%s",
@@ -423,42 +419,11 @@ static string HTTPReply(int nStatus, const string& strMsg, const string& strRepl
         rfc1123Time().c_str(),
         keepalive ? "keep-alive" : "close",
         strMsg.size(),
-        strReplyType.c_str(),
         FormatFullVersion().c_str(),
         strMsg.c_str());
 }
 
-static string HTTPReplyDataHeader(int nStatus, size_t nSize, const string& strReplyType, bool keepalive)
-{
-    static int64_t nTime = GetTime();
-
-    const char *cStatus;
-         if (nStatus == HTTP_OK) cStatus = "OK";
-    else if (nStatus == HTTP_BAD_REQUEST) cStatus = "Bad Request";
-    else if (nStatus == HTTP_FORBIDDEN) cStatus = "Forbidden";
-    else if (nStatus == HTTP_NOT_FOUND) cStatus = "Not Found";
-    else if (nStatus == HTTP_INTERNAL_SERVER_ERROR) cStatus = "Internal Server Error";
-    else cStatus = "";
-
-    return strprintf(
-            "HTTP/1.1 %d %s\r\n"
-            "Date: %s\r\n"
-            "Connection: %s\r\n"
-            "Content-Length: %" PRIszu "\r\n"
-            "Content-Type: %s\r\n"
-            "Cache-Control: max-age=86400, public\r\n"
-            "Server: novacoin-json-rpc/%s\r\n"
-            "\r\n",
-        nStatus,
-        cStatus,
-        DateTimeStrFormat("%a, %d %b %Y %H:%M:%S +0000", nTime).c_str(),
-        keepalive ? "keep-alive" : "close",
-        nSize,
-        strReplyType.c_str(),
-        FormatFullVersion().c_str());
-}
-
-int ReadHTTPStatus(std::basic_istream<char>& stream, int &proto, bool &fGet, string &strLocation)
+int ReadHTTPStatus(std::basic_istream<char>& stream, int &proto)
 {
     string str;
     getline(stream, str);
@@ -467,9 +432,6 @@ int ReadHTTPStatus(std::basic_istream<char>& stream, int &proto, bool &fGet, str
     copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(vWords));
     if (vWords.size() < 2)
         return HTTP_INTERNAL_SERVER_ERROR;
-    const char *reqget = strstr(str.c_str(), "GET");
-    fGet = (reqget != NULL);
-    strLocation = vWords[1];
     proto = 0;
     const char *ver = strstr(str.c_str(), "HTTP/1.");
     if (ver != NULL)
@@ -504,41 +466,24 @@ int ReadHTTPHeader(std::basic_istream<char>& stream, map<string, string>& mapHea
 
 int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet)
 {
-    bool fGet;
-    (void) fGet; // silence
-    return ReadHTTP(stream, mapHeadersRet, strMessageRet);
-}
-
-
-int ReadHTTP(std::basic_istream<char>& stream, map<string, string>& mapHeadersRet, string& strMessageRet, bool& fGet)
-{
     mapHeadersRet.clear();
     strMessageRet.clear();
 
     // Read status
     int nProto = 0;
-    string strLocation = "";
-    int nStatus = ReadHTTPStatus(stream, nProto, fGet, strLocation);
+    int nStatus = ReadHTTPStatus(stream, nProto);
 
     // Read header
     int nLen = ReadHTTPHeader(stream, mapHeadersRet);
     if (nLen < 0 || nLen > (int)MAX_SIZE)
         return HTTP_INTERNAL_SERVER_ERROR;
 
-    if (fGet)
+    // Read message
+    if (nLen > 0)
     {
-        // Just return a location
-        strMessageRet = strLocation;
-    }
-    else
-    {
-        // Read message
-        if (nLen > 0)
-        {
-            vector<char> vch(nLen);
-            stream.read(&vch[0], nLen);
-            strMessageRet = string(vch.begin(), vch.end());
-        }
+        vector<char> vch(nLen);
+        stream.read(&vch[0], nLen);
+        strMessageRet = string(vch.begin(), vch.end());
     }
 
     string sConHdr = mapHeadersRet["connection"];
@@ -609,7 +554,7 @@ void ErrorReply(std::ostream& stream, const Object& objError, const Value& id)
     if (code == RPC_INVALID_REQUEST) nStatus = HTTP_BAD_REQUEST;
     else if (code == RPC_METHOD_NOT_FOUND) nStatus = HTTP_NOT_FOUND;
     string strReply = JSONRPCReply(Value::null, objError, id);
-    stream << HTTPReply(nStatus, strReply, "application/json", false) << std::flush;
+    stream << HTTPReply(nStatus, strReply, false) << std::flush;
 }
 
 bool ClientAllowed(const boost::asio::ip::address& address)
@@ -820,7 +765,7 @@ static void RPCAcceptHandler(boost::shared_ptr< basic_socket_acceptor<Protocol, 
     {
         // Only send a 403 if we're not using SSL to prevent a DoS during the SSL handshake.
         if (!fUseSSL)
-            conn->stream() << HTTPReply(HTTP_FORBIDDEN, "", "text/html", false) << std::flush;
+            conn->stream() << HTTPReply(HTTP_FORBIDDEN, "", false) << std::flush;
         delete conn;
     }
 
@@ -1063,13 +1008,12 @@ void ThreadRPCServer3(void* parg)
         map<string, string> mapHeaders;
         string strRequest;
 
-        bool fGet = false;
-        ReadHTTP(conn->stream(), mapHeaders, strRequest, fGet);
+        ReadHTTP(conn->stream(), mapHeaders, strRequest);
 
         // Check authorization
         if (mapHeaders.count("authorization") == 0)
         {
-            conn->stream() << HTTPReply(HTTP_UNAUTHORIZED, "", "text/html", false) << std::flush;
+            conn->stream() << HTTPReply(HTTP_UNAUTHORIZED, "", false) << std::flush;
             break;
         }
         if (!HTTPAuthorized(mapHeaders))
@@ -1081,7 +1025,7 @@ void ThreadRPCServer3(void* parg)
             if (mapArgs["-rpcpassword"].size() < 20)
                 Sleep(250);
 
-            conn->stream() << HTTPReply(HTTP_UNAUTHORIZED, "", "text/html", false) << std::flush;
+            conn->stream() << HTTPReply(HTTP_UNAUTHORIZED, "", false) << std::flush;
             break;
         }
         if (mapHeaders["connection"] == "close")
@@ -1090,69 +1034,29 @@ void ThreadRPCServer3(void* parg)
         JSONRequest jreq;
         try
         {
-            if (fGet)
-            {
-                // Simple GET requests
-                string strReplyType;
-                vector<unsigned char> vchReply;
+            // Parse request
+            Value valRequest;
+            if (!read_string(strRequest, valRequest))
+                throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
 
-                // Process GET requests here
-#ifdef USE_EXTJS
-                bool isBinary = false;
-                if (!get_file(strRequest, vchReply, strReplyType, isBinary))
-                {
-                    // No such object compiled-in
-                    conn->stream() << HTTPReply(HTTP_NOT_FOUND, "Not found", "text/html", fRun) << std::flush;
-                }
-                else
-                {
-                    // Send file if found
-                    conn->stream() << HTTPReplyDataHeader(HTTP_OK, vchReply.size(), strReplyType, fRun);
+            string strReply;
 
-                    if (isBinary)
-                    {
-                        // Binary data stream may contain zeros
-                        for (unsigned int i = 0; i< vchReply.size(); i++)
-                            conn->stream() << vchReply[i];
-                    }
-                    else
-                    {
-                        conn->stream() << &vchReply[0];
-                    }
+            // singleton request
+            if (valRequest.type() == obj_type) {
+                jreq.parse(valRequest);
 
-                    conn->stream() << std::flush;
-                }
-#else
-                // Built without compiled-in objects
-                conn->stream() << HTTPReply(HTTP_NOT_FOUND, "Not found", "text/html", fRun) << std::flush;
-#endif
-            }
+                Value result = tableRPC.execute(jreq.strMethod, jreq.params);
+
+                // Send reply
+                strReply = JSONRPCReply(result, Value::null, jreq.id);
+
+            // array of requests
+            } else if (valRequest.type() == array_type)
+                strReply = JSONRPCExecBatch(valRequest.get_array());
             else
-            {
-                // JSON-RPC requests
-                string strReply;
-                Value valRequest;
-                if (!read_string(strRequest, valRequest))
-                    throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
+                throw JSONRPCError(RPC_PARSE_ERROR, "Top-level object parse error");
 
-                // singleton request
-                if (valRequest.type() == obj_type) {
-                    jreq.parse(valRequest);
-
-                    Value result = tableRPC.execute(jreq.strMethod, jreq.params);
-
-                    // Send reply
-                    strReply = JSONRPCReply(result, Value::null, jreq.id);
-
-                // array of requests
-                } else if (valRequest.type() == array_type)
-                    strReply = JSONRPCExecBatch(valRequest.get_array());
-                else
-                    throw JSONRPCError(RPC_PARSE_ERROR, "Top-level object parse error");
-
-                conn->stream() << HTTPReply(HTTP_OK, strReply, "application/json", fRun) << std::flush;
-            }
-
+            conn->stream() << HTTPReply(HTTP_OK, strReply, fRun) << std::flush;
         }
         catch (Object& objError)
         {
