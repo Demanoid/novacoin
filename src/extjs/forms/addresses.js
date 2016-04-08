@@ -11,7 +11,6 @@ function LoadAddressInfo()
       method: 'getaddresses',
       params: []
     };
-
     Ext.Ajax.request({
         url : '/',
         method: 'POST',
