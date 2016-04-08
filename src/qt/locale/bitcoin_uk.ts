@@ -2010,7 +2010,6 @@ Reduce the number of addresses involved in the address creation.</source>
     </message>
     <message>
         <location filename="../forms/optionsdialog.ui" line="126"/>
-<<<<<<< HEAD
         <source>Automatically open the NovaCoin client port on the router. This only works when your router supports UPnP and it is enabled.</source>
         <translation>Автоматично відкривати порт для клієнту новакоін на роутері. Працює лише якщо ваш роутер підтримує UPnP і ця функція увімкнена.</translation>
     </message>
@@ -2021,8 +2020,6 @@ Reduce the number of addresses involved in the address creation.</source>
     </message>
     <message>
         <location filename="../forms/optionsdialog.ui" line="136"/>
-=======
->>>>>>> refs/remotes/origin/master
         <source>Connect to the NovaCoin network through a SOCKS proxy (e.g. when connecting through Tor).</source>
         <translation>Підключення до мережі через SOCKS5 проксі (напр. при підключенні через Tor).</translation>
     </message>
@@ -4421,7 +4418,6 @@ If the file does not exist, create it with owner-readable-only file permissions.
     </message>
     <message>
         <location filename="../bitcoinstrings.cpp" line="165"/>
-<<<<<<< HEAD
         <source>Use UPnP to map the listening port (default: 0)</source>
         <translation>Намагатись використовувати UPnP для відображення порту, що прослуховується, на роутері (типово: 0)</translation>
     </message>
@@ -4432,8 +4428,6 @@ If the file does not exist, create it with owner-readable-only file permissions.
     </message>
     <message>
         <location filename="../bitcoinstrings.cpp" line="167"/>
-=======
->>>>>>> refs/remotes/origin/master
         <source>Use proxy to reach tor hidden services (default: same as -proxy)</source>
         <translation>Використовувати окремий проксі для з&apos;єднання з учасниками через приховані сервіси Tor (типово: так само, як -proxy)</translation>
     </message>

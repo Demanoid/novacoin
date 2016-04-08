@@ -124,13 +124,9 @@ enum threadId
 
 extern bool fClient;
 extern bool fDiscover;
-<<<<<<< HEAD
 extern bool fUseUPnP;
-=======
 extern bool fNoListen;
 
-extern bool fDiscover;
->>>>>>> refs/remotes/origin/master
 extern uint64_t nLocalServices;
 extern uint64_t nLocalHostNonce;
 extern CAddress addrSeenByPeer;
