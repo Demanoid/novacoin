@@ -122,6 +122,9 @@
     <ClCompile Include="..\..\src\rpccrypt.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\ipcollector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\addrman.h">
@@ -241,12 +244,11 @@
     <ClInclude Include="..\..\src\ministun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\ipcollector.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Object Include="..\..\src\crypto\sha2\asm\sha2-x86_64.obj">
-      <Filter>Source Files</Filter>
-    </Object>
     <ClInclude Include="..\..\src\kernel_worker.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -256,5 +258,8 @@
     <ClInclude Include="..\..\src\ies.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="..\..\src\crypto\sha2\asm\sha2-x86_64.obj" />
   </ItemGroup>
 </Project>
